@@ -1,9 +1,11 @@
 " selectbuf.vim -- lets you select a buffer visually.
 " Author: Hari Krishna <hari_vim@yahoo.com>
-" Last Change: 26-Oct-2001 @ 12:04
+" Last Change: 08-Nov-2001 @ 18:59
 " Requires: Vim-6.0 or higher, lightWeightArray.vim(1.0.1),
-"           bufNwinUtils.vim(1.0.2)
-" Version: 2.1.9
+"           bufNwinUtils.vim(1.0.3)
+" Version: 2.1.10
+" Download latest version from:
+"           http://vim.sourceforge.net/scripts/script.php?script_id=107
 "
 "  Source this file or drop it in plugin directory and press <F3> to get the
 "    list of buffers.
@@ -11,7 +13,7 @@
 "    double click with the left-mouse button.
 "  If you want to close the window without making a selection, press <F3> again.
 "  You can also press ^W<CR> to open the file in a new window.
-"  You can use dd to delete the buffer.
+"  You can use d to delete the buffer.
 "  For convenience when the browser is opened, the line corresponding to the
 "    next buffer is marked with 'a so that you can quickly go to the next
 "    buffer.
@@ -37,6 +39,8 @@
 "     let selBufAlwaysShowDirectories = 1
 "     let selBufAlwaysWrapLines = 0
 "     let selBufAlwaysShowPaths = 1
+"     let g:selBufBrowserMode = "keep" " split, switch, keep
+"     let g:selBufUseVerticalSplit = 1
 "
 
 if exists("loaded_selectbuf")
@@ -116,7 +120,7 @@ if exists("g:selBufDefaultSortOrder")
   let s:sorttype = g:selBufDefaultSortOrder
   unlet g:selBufDefaultSortOrder
 else
-  let s:sorttype = 0
+  let s:sorttype = "number"
 endif
 
 "
@@ -186,6 +190,35 @@ else
 endif
 
 "
+" Defines the mode of operation for the browser.
+" The default is 0 for "split". Other possible values are:
+"   1 - switch
+"   2 - keep
+" The "split" mode always opens the browser after creating a new window, and
+"   closes it after selecting a browser.
+" The "switch" mode doesn't do the above and tries to reuse the current window.
+" The "keep" keeps the browser always open. It opens the selected browser in
+"   the most recently used window.
+if exists("g:selBufBrowserMode")
+  let s:browserMode = g:selBufBrowserMode
+  unlet g:selBufBrowserMode
+else
+  let s:browserMode = "split"
+endif
+
+
+"
+" If a the window should be split vertically.
+" The defaul is NOT to split verticall.
+"
+if exists("g:selBufUseVerticalSplit")
+  let s:useVerticalSplit = g:selBufUseVerticalSplit
+  unlet g:selBufUseVerticalSplit
+else
+  let s:useVerticalSplit = 0
+endif
+
+"
 " END configuration.
 "
 
@@ -246,45 +279,60 @@ aug SelectBuf
 aug END
 
 
+"
+" Functions start from here.
+"
+
 function! s:SelBufListBufs()
-  " First check if there is a browser already running.
-  let browserWinNo = FindWindowForBuffer(
-          \ substitute(s:windowName, '\\ ', ' ', "g"), 1)
-  if browserWinNo != -1
-    " How can I move to this window directly ?
-    while 1
-        if winnr() == browserWinNo
-            break
-        endif
-        exec "normal! " . "\<C-W>w"
-    endwhile
-    return
-  endif
 
-  " If user wants us to save window sizes and restore them later.
-  if s:restoreWindowSizes
-    call SaveWindowSettings()
-  endif
-
-  let s:originalBuffer = bufnr("%")
   " For use with the display.
+  let s:originalBuffer = bufnr("%")
   let s:originalAltBuffer = bufnr("#")
   " A quick hack to restore the search string.
   if histnr("search") != -1
     let s:selBufSavedSearchString = histget("search", -1)
   endif
-  split
 
-  " Find if there is a buffer already created.
-  let bufNo = FindBufferForName(s:windowName)
-  if bufNo != -1
-    " Switch to the existing buffer.
-    exec "buffer " . bufNo
+  " First check if there is a browser already running.
+  let browserWinNo = FindWindowForBuffer(
+          \ substitute(s:windowName, '\\ ', ' ', "g"), 1)
+  if browserWinNo != -1
+    call MoveCursorToWindow(browserWinNo)
   else
-    " Create a new buffer.
-    exec ":e " . s:windowName
+    " If user wants us to save window sizes and restore them later.
+    "   But don't save unless "split" mode, as otherwise we are not creating a
+    "   new window.
+    if s:restoreWindowSizes && s:SelBufGetModeTypeByName(s:browserMode) == 0
+      call SaveWindowSettings()
+    endif
+
+    " Don't split window for "switch" mode.
+    if s:SelBufGetModeTypeByName(s:browserMode) != 1
+      if s:useVerticalSplit
+        vert split
+      else
+        split
+      endif
+    endif
   endif
-  " The actual work should have been done by now by the BufWinEnter autocommand.
+
+  if browserWinNo == -1
+    " Find if there is a buffer already created.
+    let bufNo = FindBufferForName(s:windowName)
+    if bufNo != -1
+      " Switch to the existing buffer.
+      exec "buffer " . bufNo
+    else
+      " Create a new buffer.
+      exec ":e " . s:windowName
+    endif
+    " The actual work should have been done by now by the BufWinEnter
+    "   autocommand.
+  else
+    " Since we have the browser already open, we have to update the window
+    "   explicitly.
+    call s:SelBufUpdateBuffer()
+  endif
 
   if line("'t") != 0
     normal! 't
@@ -303,7 +351,10 @@ function! s:SelBufUpdateHeader()
   silent! /^"=
   normal! mt
 
-  call s:SelBufAdjustWindowSize()
+  " For vertical split, we shouldn't adjust the number of lines.
+  if ! s:useVerticalSplit
+    call s:SelBufAdjustWindowSize()
+  endif
 
   " Return to the original position.
   if line("'z") != 0
@@ -463,7 +514,10 @@ function! s:SelBufUpdateBuffer()
   call s:SortSelect(0)
   let s:savePositionInSort = _savePositionInSort
 
-  call s:SelBufAdjustWindowSize()
+  " For vertical split, we shouldn't adjust the number of lines.
+  if ! s:useVerticalSplit
+    call s:SelBufAdjustWindowSize()
+  endif
 endfunction
 
 
@@ -483,14 +537,23 @@ function! s:SelBufSelectCurrentBuffer(openInNewWindow)
     +
     return
   endif
-  if ! (a:openInNewWindow || s:openInNewWindow)
-    " In any case, if there is only one window, then don't quit.
-    if (NumberOfWindows() > 1)
-      quit
+
+  " Quit window only for "split" mode.
+  if s:SelBufGetModeTypeByName(s:browserMode) == 0
+    if ! (a:openInNewWindow || s:openInNewWindow)
+      " In any case, if there is only one window, then don't quit.
+      if (NumberOfWindows() > 1)
+        quit
+      endif
     endif
+    let v:errmsg = ""
+  elseif s:SelBufGetModeTypeByName(s:browserMode) == 2
+    " Switch to the most recently used window.
+    wincmd p
   endif
-  let v:errmsg = ""
+
   silent! exec "buffer" s:selectedBufferNumber
+
   if v:errmsg != ""
     split
     exec "buffer" s:selectedBufferNumber
@@ -540,9 +603,17 @@ endfunction
 
 
 function! s:SelBufQuit()
+  if s:SelBufGetModeTypeByName(s:browserMode) == 1
+    e#
+    return
+  endif
+
   if NumberOfWindows() > 1
-    quit | call RestoreWindowSettings()
-    exec "normal! :\<BS>"
+    silent! quit
+
+    if s:restoreWindowSizes && s:SelBufGetModeTypeByName(s:browserMode) != 2
+      call RestoreWindowSettings()
+    endif
   else
     echo "Can't quit the last window"
   endif
@@ -688,6 +759,7 @@ function! s:SelBufToggleHidePaths()
 endfunction
 
 
+" FIXME: Should I do this even for "keep" mode?
 function! s:SelBufDone()
   call s:SelBufHACKSearchString()
 
@@ -728,6 +800,38 @@ function! s:SelBufGetBufferNumber()
 endfunction
 
 
+"
+" Utility methods.
+"
+
+function! s:SelBufGetModeNameByType(modeType)
+  if a:modeType == 0
+    return "split"
+  elseif a:modeType == 1
+    return "switch"
+  elseif a:modeType == 2
+    return "keep"
+  elseif match(a:modeType, '\a') != -1
+    return a:modeType
+  else
+    return ""
+  endif
+endfunction
+
+function! s:SelBufGetModeTypeByName(modeName)
+  if match(a:modeName, '\d') != -1
+    return (a:modeName + 0)
+  elseif a:modeName == "split"
+    return 0
+  elseif a:modeName == "switch"
+    return 1
+  elseif a:modeName == "keep"
+    return 2
+  else
+    return -1
+  endif
+endfunction
+
 
 """
 """ Support for sorting...from explorer.vim (2.5)
@@ -748,7 +852,7 @@ function! s:SelBufGetSortNameByType(sorttype)
     return "type"
   elseif a:sorttype == 4
     return "indicators"
-  elseif match(a:sortname, '\a') != -1
+  elseif match(a:sorttype, '\a') != -1
     return a:sorttype
   else
     return ""
@@ -941,8 +1045,8 @@ function! s:SortListing(msg)
 
     " Do the sort
     0
-    silent! /^"=/+1,$call s:Sort(s:SelBufGetSortCmpFnByType(s:sorttype),
-      \ s:sortdirection)
+    silent! /^"=/+1,$call s:Sort(s:SelBufGetSortCmpFnByType(
+      \ s:SelBufGetSortTypeByName(s:sorttype)), s:sortdirection)
 
     " Replace the header with updated information
     call s:SelBufUpdateHeader()
