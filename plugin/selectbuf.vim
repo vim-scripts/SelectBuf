@@ -1,9 +1,9 @@
 "
 " selectbuf.vim -- lets you select a buffer visually.
-" Author: Hari Krishna <haridsv@ureach.com>
+" Author: Hari Krishna <hari_vim@yahoo.com>
 " Last Change: 08-Oct-2001 @ 17:39
 " Requires: Vim-6.0 or higher, lightWeightArray.vim, bufNwinUtils.vim
-" Version: 2.0.2
+" Version: 2.0.3
 "
 "  Source this file and press <F3> to get the list of buffers.
 "  Move the cursor on to the buffer that you need to select and press <CR> or
