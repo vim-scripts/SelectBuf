@@ -1,12 +1,12 @@
 " selectbuf.vim
 " Author: Hari Krishna (hari_vim at yahoo dot com)
-" Last Change: 04-Apr-2004 @ 16:53
+" Last Change: 09-Jul-2004 @ 19:16
 " Created: Before 20-Jul-1999
 "          (Ref: http://groups.yahoo.com/group/vim/message/6409
 "                mailto:vim-thread.1235@vim.org)
-" Requires: Vim-6.2, multvals.vim(3.5), genutils.vim(1.10)
+" Requires: Vim-6.3, multvals.vim(3.5), genutils.vim(1.12)
 " Depends On: multiselect.vim(1.0)
-" Version: 3.2.10
+" Version: 3.3.4
 " Licence: This program is free software; you can redistribute it and/or
 "          modify it under the terms of the GNU General Public License.
 "          See http://www.gnu.org/copyleft/gpl.txt 
@@ -27,39 +27,40 @@
 "     buffers using u command).
 "
 " TODO:
-"   - Switch to another buffer and come back. Bizarre.
-"   - s:curBufNameLen is getting reset to 9 elsewhere.
-"   - I need to consolidate all the event rules at one place.
+"   - It is useful to have space for additional indicators. Useful to show
+"     perforce status.
+"   - s:curBufNameLen is getting reset to 9 else where (hard to reproduce).
+"     - Fixed one issue, need to observe if it still happens.
 "   - Is sort by path working correctly?
 "   - When entering any of the plugin window's WinManager does something that
 "     makes Vim ignore quick mouse-double-clicks. This is a WinManager issue,
 "     as I verified this problem with other plugins also and SelectBuf in
 "     stand-alone "keep" mode works fine.
 
-if exists("loaded_selectbuf")
+if exists('loaded_selectbuf')
   finish
 endif
-if v:version < 602
-  echomsg "You need Vim 6.2 to run this version of selectbuf.vim."
+if v:version < 603
+  echomsg 'SelectBuf: You need at least Vim 6.3'
   finish
 endif
 
 " Dependency checks.
-if !exists("loaded_multvals")
+if !exists('loaded_multvals')
   runtime plugin/multvals.vim
 endif
-if !exists("loaded_multvals") || loaded_multvals < 305
-  echomsg "SelectBuf: You need a newer version of multvals.vim plugin"
+if !exists('loaded_multvals') || loaded_multvals < 305
+  echomsg 'SelectBuf: You need a newer version of multvals.vim plugin'
   finish
 endif
-if !exists("loaded_genutils")
+if !exists('loaded_genutils')
   runtime plugin/genutils.vim
 endif
-if !exists("loaded_genutils") || loaded_genutils < 110
-  echomsg "SelectBuf: You need a newer version of genutils.vim plugin"
+if !exists('loaded_genutils') || loaded_genutils < 112
+  echomsg 'SelectBuf: You need a newer version of genutils.vim plugin'
   finish
 endif
-let loaded_selectbuf=1
+let loaded_selectbuf=303
 
 " Make sure line-continuations won't cause any problem. This will be restored
 "   at the end
@@ -99,7 +100,8 @@ if !exists('s:disableSummary') " The first-time only, initialize with defaults.
   let s:ignoreCaseInSort = 0
   let s:displayMaxPath = -1
   if OnMS()
-    let s:launcher = '!start rundll32 url.dll,FileProtocolHandler'
+    "let s:launcher = '!start rundll32 url.dll,FileProtocolHandler'
+    let s:launcher = '!start rundll32 SHELL32.DLL,ShellExec_RunDLL'
   else
     let s:launcher = ''
   endif
@@ -147,10 +149,14 @@ let g:SelectBuf_title = s:windowName
 "
 " Define a default mapping if the user hasn't defined a map.
 "
-if !hasmapto('<Plug>SelectBuf') &&
-      \ (! exists("no_plugin_maps") || ! no_plugin_maps) &&
+if (! exists("no_plugin_maps") || ! no_plugin_maps) &&
       \ (! exists("no_selectbuf_maps") || ! no_selectbuf_maps)
-  nmap <unique> <silent> <F3> <Plug>SelectBuf
+  if !hasmapto('<Plug>SelectBuf')
+    nmap <unique> <silent> <F3> <Plug>SelectBuf
+  endif
+  if !hasmapto('<Plug>SelBufLaunchCmd', 'n')
+    nmap <unique> <Leader>sbl <Plug>SelBufLaunchCmd
+  endif
 endif
 
 
@@ -196,10 +202,11 @@ command! -nargs=1 SBBufToTail :call <SID>PushToBackInMRU(
       \ (<f-args> !~ '^\d\+$') ? bufnr(<f-args>) : <f-args>, 1)
 " Command to change settings interactively.
 command! -nargs=0 SBSettings :call <SID>SBSettings()
-command! -complete=file -nargs=+ SBLaunch :call <SID>LaunchBuffer(<f-args>)
+command! -complete=file -nargs=* SBLaunch :call <SID>LaunchBuffer(<f-args>)
 
 " The main plug-in mapping.
 noremap <script> <silent> <Plug>SelectBuf :call <SID>ListBufs()<CR>
+nnoremap <script> <Plug>SelBufLaunchCmd :SBLaunch<Space>
 
 " Deleting autocommands first is a good idea especially if we want to reload
 "   the script without restarting vim.
@@ -237,6 +244,7 @@ if !exists('s:myBufNum')
   let s:auSuspended = 1 " Disable until we are ready.
   let s:bufList = ""
   let s:indList = ""
+  let s:quiteWinEnter = 0
 
   " This is the list maintaining the MRU order of buffers.
   let s:MRUlist = ''
@@ -345,29 +353,30 @@ endfunction
 " Buffer Update {{{
 " Header {{{
 function! s:UpdateHeader()
+  let _modifiable = &l:modifiable
   setlocal modifiable
-
   " Remember the position.
   call SaveSoftPosition("UpdateHeader")
-  if search('^"= ', 'w')
-    silent! 1,.delete _
-  endif
+  try
+    if search('^"= ', 'w')
+      silent! keepjumps 1,.delete _
+    endif
 
-  call s:AddHeader()
-  call search('^"= ', "w")
-  let s:headerSize = line('.')
+    call s:AddHeader()
+    call search('^"= ', "w")
+    let s:headerSize = line('.')
 
-  if s:opMode ==# 'WinManager'
-    call WinManagerForceReSize('SelectBuf')
-  else
-    call s:AdjustWindowSize()
-  endif
-
-  " Return to the original position.
-  call RestoreSoftPosition("UpdateHeader")
-  call ResetSoftPosition("UpdateHeader")
-
-  setlocal nomodifiable
+    if s:opMode ==# 'WinManager'
+      call WinManagerForceReSize('SelectBuf')
+    else
+      call s:AdjustWindowSize()
+    endif
+  finally
+    " Return to the original position.
+    call RestoreSoftPosition("UpdateHeader")
+    call ResetSoftPosition("UpdateHeader")
+    let &l:modifiable = _modifiable
+  endtry
 endfunction " UpdateHeader
 
 function! s:MapArg(key)
@@ -457,7 +466,7 @@ function! s:FullUpdate() " {{{
   call OptClearBuffer()
 
   call s:AddHeader()
-  silent! $delete _ " Delete one empty extra line at the end.
+  silent! keepjumps $delete _ " Delete one empty extra line at the end.
   let s:headerSize = line("$")
   let _curBufNameLen = s:curBufNameLen
   let s:curBufNameLen = s:CalcMaxBufNameLen(-1, !s:showHidden)
@@ -483,7 +492,7 @@ function! s:FullUpdate() " {{{
     if s:ShouldShowBuffer(i)
       let s:bufList = s:bufList . i . "\n"
       let newLine = s:GetBufLine(i)
-      silent! call append(line("$"), newLine)
+      silent! keepjumps call append(line("$"), newLine)
       let nBuffersShown = nBuffersShown + 1
     endif
     let nBuffers = nBuffers + 1
@@ -565,14 +574,14 @@ function! s:IncrementalUpdate() " {{{
             let colToIns = (s:showDetails ? 11 : 5) + s:curBufNameLen +
                   \ 1 " Col index starts with 1.
             let @/ = '\%'.colToIns.'c'
-            silent! exec '+,$s//'.addSpacer.'/'
+            silent! keepjumps exec '+,$s//'.addSpacer.'/'
           elseif (action ==# 'I' || action ==# 'l') && s:curBufNameLen > newMax
             "exec BPBreak(1)
             let remSpacer = ' \{'.(s:curBufNameLen - newMax).'}'
             let colToDel = (s:showDetails ? 11 : 5) + newMax
                   \ + 1 " Col index starts with 1.
             let @/ = '\%'.colToDel.'c'.remSpacer
-            silent! exec '+,$s///'
+            silent! keepjumps exec '+,$s///'
           else
             let newMax = 0
           endif
@@ -599,10 +608,10 @@ function! s:IncrementalUpdate() " {{{
 
     if search('^' . bufNo . '\>', 'w') > 0
       if action ==# 'u' || (action ==# 'd' && s:showHidden)
-	call setline('.', s:GetBufLine(bufNo))
+	silent! keepjumps call setline('.', s:GetBufLine(bufNo))
 	continue
       else
-	silent! .delete _
+	silent! keepjumps .delete _
       endif
     endif
     if action ==# 'c' || action ==# 'm'
@@ -610,7 +619,7 @@ function! s:IncrementalUpdate() " {{{
       let lineNoToInsert = BinSearchForInsert(s:headerSize + 1, line("$"),
 	    \ bufLine, s:GetSortCmpFnByType(s:GetSortTypeByName(s:sorttype)),
 	    \ s:sortdirection)
-      silent! call append(lineNoToInsert, bufLine)
+      silent! keepjumps call append(lineNoToInsert, bufLine)
     endif
   endwhile
   call MvIterDestroy('SelectBufUpdateAxns')
@@ -724,29 +733,31 @@ function! s:BufWinLeave()
 endfunction
 
 function! s:BufWipeout()
-  call s:BufDeleteImpl('w', 1)
+  call s:BufDeleteImpl(expand("<abuf>")+0, 0, 'w')
 endfunction
 
 function! s:BufDelete()
   "if s:enableDynUpdate
   "  call s:DynUpdate('d', expand("<abuf>") + 0, 0)
   "endif
-  call s:BufDeleteImpl('d', 0)
+  call s:BufDeleteImpl(expand("<abuf>")+0, 0, 'd')
 endfunction
 
-function! s:BufDeleteImpl(event, wipeOut)
-  let bufNr = expand("<abuf>") + 0
-  if a:wipeOut
-    call s:DelFromMRU(bufNr)
+function! s:BufDeleteImpl(bufNr, delayedUpdate, event)
+  if a:event ==# 'w'
+    call s:DelFromMRU(a:bufNr)
   endif
   if s:enableDynUpdate
-    let len = (s:showPaths == 2) ? strlen(s:FileName(bufNr)) : -1
+    let len = (s:showPaths == 2) ? strlen(s:FileName(a:bufNr)) : -1
     " Optimization: Pass 0 for ovrrdDelayDynUpdate only when the next call is
     "   not going to happen.
-    call s:DynUpdate(a:event, bufNr,
-          \ (len == s:curBufNameLen && s:showPaths == 2) ? 1 : 0)
-    if len == s:curBufNameLen && s:showPaths == 2
-      call s:DynUpdate('I', bufNr, 0) " Let s:curBufNameLen be recalculated.
+    call s:DynUpdate(a:event, a:bufNr,
+          \ (len == s:curBufNameLen && s:showPaths == 2) ? 1 : a:delayedUpdate)
+    " Send event only if the buffer is not going to be shown anymore.
+    if len == s:curBufNameLen && s:showPaths == 2 &&
+          \ (a:event ==# 'w' || !s:showHidden)
+      " Let s:curBufNameLen be recalculated.
+      call s:DynUpdate('I', a:bufNr, a:delayedUpdate)
     endif
   endif
 endfunction
@@ -760,15 +771,20 @@ endfunction
 function! s:BufAdd()
   let bufNr = expand("<abuf>") + 0
   if s:enableDynUpdate
-    let len = (s:showPaths == 2) ? strlen(s:FileName(bufNr)) : -1
     " Ignore non-file buffers.
     if !s:IgnoreBuf(bufNr)
-      if len > s:curBufNameLen
-        call s:DynUpdate('i', bufNr, 1)
-      endif
-      call s:DynUpdate('c', bufNr, 0)
+      call s:BufAddImpl(bufNr, 0)
     endif
   endif
+endfunction
+
+" Actual event generator.
+function! s:BufAddImpl(bufNr, delayedUpdate)
+  let len = (s:showPaths == 2) ? strlen(s:FileName(a:bufNr)) : -1
+  if len > s:curBufNameLen
+    call s:DynUpdate('i', a:bufNr, 1)
+  endif
+  call s:DynUpdate('c', a:bufNr, a:delayedUpdate)
 endfunction
 " Event handlers }}}
 " Buffer Update }}}
@@ -795,11 +811,11 @@ endfunction " AddBufNumbers
 "  call s:AddColumn(2, s:indList)
 "endfunction " AddIndicators
 
+" Pass -1 for colWidth to include till the end of line.
 function! s:RemoveColumn(colPos, colWidth, collect)
   if line("$") == s:headerSize
     return
   endif
-  0
   call search('^"= ', "w")
   +
   if a:collect
@@ -808,13 +824,16 @@ function! s:RemoveColumn(colPos, colWidth, collect)
   endif
   let block = ''
   let _sol = &startofline
+  let _modifiable = &l:modifiable
   try
     setlocal modifiable
     set nostartofline
     exec "normal ".a:colPos."|" | " Position correctly.
-    silent! exec "normal! \<C-V>G".(a:colWidth-1)."l\"".(a:collect?'z':'_').'d'
+    silent! keepjumps exec "normal! \<C-V>G".
+          \ ((a:colWidth > 0) ? (a:colWidth-1).'l' : '$').
+          \ '"'.(a:collect?'z':'_').'d'
   finally
-    setlocal nomodifiable
+    let &l:modifiable = _modifiable
     let  &startofline = _sol
     if a:collect
       let block = @z
@@ -829,27 +848,24 @@ function! s:AddColumn(colPos, block)
   if line("$") == s:headerSize || a:block == ""
     return
   endif
-  let _unnamed = @"
   let _z = @z
   let _undolevels = &undolevels
+  let _modifiable = &l:modifiable
   try
     set undolevels=1 " Make sure there is at least one level.
     setlocal modifiable
-    silent! $put =a:block
-    silent! exec "normal! \<C-V>G$\"zyu"
-    0
+    call setreg('z', a:block, "\<C-V>")
     call search('^"= ', "w")
     +
     exec "normal ".a:colPos."|" | " Position correctly.
     if a:colPos == 0
-      normal! P
+      normal! "zP
     else
-      normal! p
+      normal! "zp
     endif
   finally
-    setlocal nomodifiable
+    let &l:modifiable = _modifiable
     let @z = _z
-    let @" = _unnamed
     let &undolevels = _undolevels
   endtry
 endfunction " AddColumn
@@ -866,22 +882,11 @@ function! s:GetBufLine(bufNum)
   if s:showDetails
     let newLine = newLine . s:GetBufIndicators(a:bufNum)
   endif
-  if s:showPaths
-    if s:showPaths == 2
-      let bufName = s:FileName(a:bufNum)
-      let path = expand('#'.a:bufNum.':p:h')
-      let bufName = bufName . GetSpacer(s:curBufNameLen - strlen(bufName) + 1) .
-            \ s:TrimPath(path)
-    else
-      let bufName = s:TrimPath(s:BufName(a:bufNum))
-    endif
-  else
-    let bufName = s:FileName(a:bufNum)
-  endif
-  let newLine = newLine . bufName
+  let newLine = newLine . s:GetBufName(a:bufNum)
   return newLine
 endfunction
 
+" Width: 6
 function! s:GetBufIndicators(bufNum)
   let bufInd = ''
   if !buflisted(a:bufNum)
@@ -932,6 +937,22 @@ function! s:GetBufIndicators(bufNum)
   let bufInd = bufInd . " "
 
   return bufInd
+endfunction
+
+function! s:GetBufName(bufNum)
+  if s:showPaths
+    if s:showPaths == 2
+      let bufName = s:FileName(a:bufNum)
+      let path = expand('#'.a:bufNum.':p:h')
+      let bufName = bufName . GetSpacer(s:curBufNameLen - strlen(bufName) + 1) .
+            \ s:TrimPath(path)
+    else
+      let bufName = s:TrimPath(s:BufName(a:bufNum))
+    endif
+  else
+    let bufName = s:FileName(a:bufNum)
+  endif
+  return bufName
 endfunction
 
 function! s:TrimPath(path)
@@ -1009,12 +1030,14 @@ function! s:DeleteSelBuffers(wipeout) range
     call WinManagerSuspendAUs()
   endif
 
+  call SaveHardPosition('DeleteSelBuffers')
+
   if s:hideBufNums
     call s:AddBufNumbers()
   endif
-
-  call SaveHardPosition('DeleteBuffers')
-
+  let _delayedDynUpdate = s:delayedDynUpdate
+  " Temporarily delay dynamic update until we call UpdateBuffers()
+  let s:delayedDynUpdate = 1
   try
     if s:MultiSelectExists()
       exec 'MSExecCmd call '.s:myScriptId.'DeleteBuffers("'.a:wipeout.'")'
@@ -1023,13 +1046,20 @@ function! s:DeleteSelBuffers(wipeout) range
       exec a:firstline.','.a:lastline.'call s:DeleteBuffers(a:wipeout)'
     endif
   finally
+    if s:hideBufNums
+      call s:RemoveBufNumbers()
+    endif
+    let s:delayedDynUpdate = _delayedDynUpdate
+    if s:deleteMsg != ''
+      call s:UpdateBuffers(0)
+    endif
     redraw | echo s:deleteMsg
     "call input(s:deleteMsg)
     let s:deleteMsg = ''
   endtry
 
-  call RestoreHardPosition('DeleteBuffers')
-  call ResetHardPosition('DeleteBuffers')
+  call RestoreHardPosition('DeleteSelBuffers')
+  call ResetHardPosition('DeleteSelBuffers')
 
   if s:opMode ==# 'WinManager'
     call WinManagerResumeAUs()
@@ -1043,59 +1073,29 @@ function! s:DeleteBuffers(wipeout) range
   let deletedMsg = ""
   let undeletedMsg = ""
   let wipedoutMsg = ""
-  call s:SuspendAutoUpdates('DeleteBuffers')
-  let maxBufNameLenBuf = -1
-  try
-    setlocal modifiable
-    let line = a:firstline
-    silent! execute line
-    while line <= a:lastline
-      let selectedBufNum = SBCurBufNumber()
-      if selectedBufNum != -1
-        if a:wipeout
-          if maxBufNameLenBuf == -1 &&
-                \ strlen(s:FileName(selectedBufNum)) == s:curBufNameLen
-            let maxBufNameLenBuf = selectedBufNum
-          endif
-          exec "bwipeout" selectedBufNum
-          let nWipedout = nWipedout + 1
-          let wipedoutMsg = wipedoutMsg . " " . selectedBufNum
-          silent! delete _
-        elseif buflisted(selectedBufNum)
-          exec "bdelete" selectedBufNum
-          if ! s:showHidden
-            silent! delete _
-          else
-            call setline('.', s:GetBufLine(selectedBufNum))
-            silent! +
-          endif
-          let nDeleted = nDeleted + 1
-          let deletedMsg = deletedMsg . " " . selectedBufNum
-        else
-          " Undelete buffer.
-          call setbufvar(selectedBufNum, "&buflisted", "1")
-          call setline('.', s:GetBufLine(selectedBufNum))
-          silent! +
-          let nUndeleted = nUndeleted + 1
-          let undeletedMsg = undeletedMsg . " " . selectedBufNum
-        endif
+  let line = a:firstline
+  silent! execute line
+  while line <= a:lastline
+    let selectedBufNum = SBCurBufNumber()
+    if selectedBufNum != -1
+      if a:wipeout
+        exec "bwipeout" selectedBufNum
+        let nWipedout = nWipedout + 1
+        let wipedoutMsg = wipedoutMsg . " " . selectedBufNum
+      elseif buflisted(selectedBufNum)
+        exec "bdelete" selectedBufNum
+        let nDeleted = nDeleted + 1
+        let deletedMsg = deletedMsg . " " . selectedBufNum
+      else
+        " Undelete buffer.
+        call setbufvar(selectedBufNum, "&buflisted", "1")
+        let nUndeleted = nUndeleted + 1
+        let undeletedMsg = undeletedMsg . " " . selectedBufNum
       endif
-      let line = line + 1
-    endwhile
-  finally
-    call s:ResumeAutoUpdates()
-    " Let the max length be recalculated.
-    if (nDeleted + nWipedout) > 0
-      call s:DynUpdate('l', 0, 0)
     endif
-    if s:hideBufNums
-      call s:RemoveBufNumbers()
-    endif
-  endtry
-  if maxBufNameLenBuf != -1
-    call s:DynUpdate('I', maxBufNameLenBuf, 0)
-  endif
-  setlocal nomodifiable
+    silent! +
+    let line = line + 1
+  endwhile
 
   if nWipedout > 0
     let s:deleteMsg = s:deleteMsg . s:GetDeleteMsg(nWipedout, wipedoutMsg)
@@ -1162,10 +1162,7 @@ endfunction " }}}
 
 function! s:SetupBuf() " {{{
   call SetupScratchBuffer()
-  setlocal noreadonly " Or it shows [RO] after the buffer name, not nice.
   setlocal nowrap
-  setlocal nonumber
-  setlocal foldcolumn=0 nofoldenable
   setlocal tabstop=8
   if s:enableDynUpdate
     setlocal bufhidden=hide
@@ -1177,39 +1174,50 @@ function! s:SetupBuf() " {{{
   " buffer is made visible by other means.
   aug SelectBufAutoUpdate
   au!
-  exec "au BufWinEnter " . escape(s:windowName, '\[*^$. ') .
+  exec "au BufWinEnter " . GetBufNameForAu(fnamemodify(s:windowName, ':p')) .
         \ " :call <SID>AutoListBufs()"
-  exec "au BufWinLeave " . escape(s:windowName, '\[*^$. ') .
+  exec "au BufWinLeave " . GetBufNameForAu(fnamemodify(s:windowName, ':p')) .
         \ " :call <SID>Done()"
-  exec "au WinEnter " . escape(s:windowName, '\[*^$. ') .
+  exec "au WinEnter " . GetBufNameForAu(fnamemodify(s:windowName, ':p')) .
         \ " :call <SID>AutoUpdateBuffers(0)"
   aug END
 
   call s:SetupSyntax()
 
   " Maps {{{
-  call s:DefMap("n", "SelectKey", "<CR>", ":SBSelect<CR>")
-  call s:DefMap("n", "MSelectKey", "<2-LeftMouse>", ":SBSelect<CR>")
-  call s:DefMap("n", "WSelectKey", "<C-W><CR>", ":SBWSelect<CR>")
-  call s:DefMap("n", "OpenKey", "O", ":SBOpen<CR>")
-  call s:DefMap("n", "DeleteKey", "d", ":SBDelete<CR>")
-  call s:DefMap("n", "WipeOutKey", "D", ":SBWipeout<CR>")
-  call s:DefMap("v", "DeleteKey", "d", ":SBDelete<CR>")
-  call s:DefMap("v", "WipeOutKey", "D", ":SBWipeout<CR>")
-  call s:DefMap("n", "RefreshKey", "R", ":SBRefresh<CR>")
-  call s:DefMap("n", "SortSelectFKey", "s", ":SBFSort<cr>")
-  call s:DefMap("n", "SortSelectBKey", "S", ":SBBSort<cr>")
-  call s:DefMap("n", "SortRevKey", "r", ":SBRSort<cr>")
-  call s:DefMap("n", "QuitKey", "q", ":SBQuit<CR>")
-  call s:DefMap("n", "ShowSummaryKey", "<C-G>", ":SBSummary<CR>")
-  call s:DefMap("n", "LaunchKey", "A", ":SBLaunch<CR>")
-  call s:DefMap("n", "TDetailsKey", "i", ":SBTDetails<CR>")
-  call s:DefMap("n", "THiddenKey", "u", ":SBTHidden<CR>")
-  call s:DefMap("n", "TBufNumsKey", "p", ":SBTBufNums<CR>")
-  call s:DefMap("n", "THidePathsKey", "P", ":SBTPaths<CR>")
-  call s:DefMap("n", "THelpKey", "?", ":SBTHelp<CR>")
+  if (! exists("no_plugin_maps") || ! no_plugin_maps) &&
+        \ (! exists("no_selectbuf_maps") || ! no_selectbuf_maps)
+    let noMaps = 0
+  else
+    let noMaps = 1
+  endif
 
-  if ! s:disableSummary
+  if !noMaps
+    call s:DefMap("n", "SelectKey", "<CR>", ":SBSelect<CR>")
+    call s:DefMap("n", "MSelectKey", "<2-LeftMouse>", ":SBSelect<CR>")
+    call s:DefMap("n", "WSelectKey", "<C-W><CR>", ":SBWSelect<CR>")
+    call s:DefMap("n", "OpenKey", "O", ":SBOpen<CR>")
+    call s:DefMap("n", "DeleteKey", "d", ":SBDelete<CR>")
+    call s:DefMap("n", "WipeOutKey", "D", ":SBWipeout<CR>")
+    call s:DefMap("v", "DeleteKey", "d", ":SBDelete<CR>")
+    call s:DefMap("v", "WipeOutKey", "D", ":SBWipeout<CR>")
+    call s:DefMap("n", "RefreshKey", "R", ":SBRefresh<CR>")
+    call s:DefMap("n", "SortSelectFKey", "s", ":SBFSort<cr>")
+    call s:DefMap("n", "SortSelectBKey", "S", ":SBBSort<cr>")
+    call s:DefMap("n", "SortRevKey", "r", ":SBRSort<cr>")
+    call s:DefMap("n", "QuitKey", "q", ":SBQuit<CR>")
+    call s:DefMap("n", "ShowSummaryKey", "<C-G>", ":SBSummary<CR>")
+    call s:DefMap("n", "LaunchKey", "A", ":SBLaunch<CR>")
+    call s:DefMap("n", "TDetailsKey", "i", ":SBTDetails<CR>")
+    call s:DefMap("n", "THiddenKey", "u", ":SBTHidden<CR>")
+    call s:DefMap("n", "TBufNumsKey", "p", ":SBTBufNums<CR>")
+    call s:DefMap("n", "THidePathsKey", "P", ":SBTPaths<CR>")
+    call s:DefMap("n", "THelpKey", "?", ":SBTHelp<CR>")
+
+    cnoremap <buffer> <C-R><C-F> <C-R>=expand('#'.SBCurBufNumber().':p')<CR>
+  endif
+
+  if !s:disableSummary && !noMaps
     nnoremap <silent> <buffer> j j:call <SID>EchoBufSummary(0)<CR>
     nnoremap <silent> <buffer> k k:call <SID>EchoBufSummary(0)<CR>
     nnoremap <silent> <buffer> <Up> <Up>:call <SID>EchoBufSummary(0)<CR>
@@ -1423,7 +1431,7 @@ function! s:AdjustWindowSize() " {{{
   " Set the window size to one more than just required.
   0
   " For vertical split, we shouldn't adjust the number of lines.
-  if NumberOfWindows() != 1 && ! s:useVerticalSplit
+  if ! IsOnlyVerticalWindow() && ! s:useVerticalSplit
     let size = (line("$") + 1)
     if size > (&lines / 2)
       let size = &lines/2
@@ -1508,23 +1516,42 @@ function! s:EchoBufSummary(detailed) " {{{
 endfunction " }}}
 
 function! s:LaunchBuffer(...) " {{{
-  if ! OnMS() && s:launcher == ''
+  if s:launcher == ''
     return
   endif
   let args = ''
+  let commandNeedsEscaping = 1
+  if OnMS() && s:launcher =~# '^\s*!\s*start\>'
+    let commandNeedsEscaping = 0
+  endif
   if a:0 == 0
     let args = '#'.(bufnr('%') == s:myBufNum ? SBCurBufNumber() : bufnr('%')).
           \    ':p'
   else
     let i = 1
     while i <= a:0
-      let args = args . ' ' .
-            \ ((a:{i} !~# '^\d\+$') ?
-            \  (filereadable(a:{i}) ?
-            \   fnamemodify(a:{i}, ':p') : a:{i}) :
-            \  '#'.a:{i}.':p')
+      let arg = a:{i}
+      if filereadable(a:{i})
+        let arg = fnamemodify(arg, ':p')
+      endif
+      if OnMS() && &shellslash && filereadable(arg)
+        let arg = substitute(arg, '/', '\\', 'g')
+      endif
+      let arg = Escape(arg, ' ')
+      let args = args . arg . ((i == a:0) ? '' : ' ')
       let i = i + 1
     endwhile
+  endif
+  if commandNeedsEscaping
+    let args = EscapeCommand('', args, '')
+  else
+    " Escape the existing double-quotes (by quadrapling them).
+    let args = substitute(args, '"', '""""', 'g')
+    " Use double quotes to protect spaces and double-quotes.
+    let args = substitute(args, '\(\%([^ ]\|\\\@<=\%(\\\\\)* \)\+\)',
+          \ '"\1"', 'g')
+          "\ '\="\"".escape(submatch(1), "\\")."\""', 'g')
+    let args = UnEscape(args, ' ')
   endif
   if args != -1 && args.'' != ''
     exec 'silent! '.s:launcher args
@@ -1675,7 +1702,7 @@ function! s:ToggleDetails()
       setlocal modifiable
       try
         let @/ = '\%6c'
-        silent! +,$s//\=s:GetBufIndicators(SBCurBufNumber())/
+        silent! keepjumps +,$s//\=s:GetBufIndicators(SBCurBufNumber())/e
       finally
         let @/ = _search
         setlocal nomodifiable
@@ -1694,24 +1721,26 @@ endfunction
 
 
 function! s:ToggleHidden()
-  "let s:showHidden = ! s:showHidden
-  "call s:UpdateBuffers(1)
-  let i = 1
-  let recalcLength = 0
-  let lastBufNr = bufnr('$')
-  while i <= lastBufNr
-    if bufexists(i) && ! buflisted(i) && ! s:IgnoreBuf(i)
-      if ! recalcLength
-        call s:DynUpdate('l', 0, 1)
-        let recalcLength = 1
+  if s:enableDynUpdate
+    let i = 1
+    let lastBufNr = bufnr('$')
+    while i <= lastBufNr
+      if bufexists(i) && ! buflisted(i) && ! s:IgnoreBuf(i)
+        if s:showHidden
+          call s:BufDeleteImpl(i, 1, 'd')
+        else
+          call s:BufAddImpl(i, 1)
+        endif
       endif
-      call s:DynUpdate((s:showHidden ? 'd' : 'c'), i, 1)
-    endif
-    let i = i + 1
-  endwhile
-  let s:showHidden = ! s:showHidden
-  call s:UpdateHeader()
-  call s:ListBufs()
+      let i = i + 1
+    endwhile
+    let s:showHidden = ! s:showHidden
+    call s:UpdateHeader()
+    call s:ListBufs()
+  else
+    let s:showHidden = ! s:showHidden
+    call s:UpdateBuffers(1)
+  endif
 endfunction
 
 
@@ -1731,11 +1760,32 @@ endfunction
 
 
 function! s:ToggleHidePaths()
-  let s:showPaths = s:showPaths + 1
-  if s:showPaths > 2
-    let s:showPaths = 0
+  call SaveSoftPosition('ToggleHidePaths')
+  call s:RemoveColumn((!s:hideBufNums) * 5 + (s:showDetails) * 6 +
+        \ (s:showDetails || !s:hideBufNums) +
+        \ (s:showPaths == 2) * (s:curBufNameLen + 1), -1, 0)
+  let s:showPaths = (s:showPaths == 2) ? 0 : s:showPaths + 1
+  if s:showPaths > 0
+    setlocal modifiable
+    if s:hideBufNums
+      call s:AddBufNumbers()
+    endif
+    call search('^"= ', "w")
+    let _search = @/
+    try
+      let @/ = '$'
+      keepjumps +,$s//\=escape(s:GetBufName(SBCurBufNumber()), '\')/e
+    finally
+      let @/ = _search
+      if s:hideBufNums
+        call s:RemoveBufNumbers()
+      endif
+      setlocal nomodifiable
+    endtry
   endif
-  call s:UpdateBuffers(1)
+  call s:UpdateHeader()
+  call RestoreSoftPosition('ToggleHidePaths')
+  call ResetSoftPosition('ToggleHidePaths')
   call s:SetupSyntax()
 endfunction
 
