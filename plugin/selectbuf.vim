@@ -4,7 +4,7 @@
 " Last Change: 15-Oct-2001 @ 19:27
 " Requires: Vim-6.0 or higher, lightWeightArray.vim(1.0.1),
 "           bufNwinUtils.vim(1.0.1)
-" Version: 2.1.1
+" Version: 2.1.2
 "
 "  Source this file and press <F3> to get the list of buffers.
 "  Move the cursor on to the buffer that you need to select and press <CR> or
@@ -196,15 +196,16 @@ function! s:SelBufUpdateBuffer()
     let helpMsg = helpMsg
       \ . "\" <Enter> or Left-double-click : open current buffer\n"
       \ . "\" <C-W><Enter> : open buffer in a new window\n"
-      \ . "\" D : delete current buffer\t\tW : wipeout current buffer\n"
-      \ . "\" i : toggle additional details\t\tw : toggle line wrapping\n"
-      \ . "\" r : refresh browser\t\t\tH : toggle hidden buffers\n"
+      \ . "\" d : delete current buffer\t\tD : wipeout current buffer\n"
+      \ . "\" i : toggle additional details\t\tp : toggle line wrapping\n"
+      \ . "\" r : refresh browser\t\t\tu : toggle hidden buffers\n"
       \ . "\" q or <F3> : close browser\n"
-      \ . "\" Next, Previous & Current buffers are marked 'a', 'b' & 'c' respectively\n"
-      \ . "\" Press h to hide help\n"
+      \ . "\" Next, Previous & Current buffers are marked 'a', 'b' & 'c' "
+        \ . "respectively\n"
+      \ . "\" Press ? to hide help\n"
   else
     let helpMsg = helpMsg
-      \ . "\" Press h to show help\n"
+      \ . "\" Press ? to show help\n"
   endif
   let helpMsg = helpMsg . "Buffer\t\tFile"
   put! =helpMsg
@@ -302,8 +303,10 @@ function! s:SelBufUpdateBuffer()
   set nomodifiable
   " Just set the window size to one more than just required.
   normal! 1G
-  exec "resize" . (line("$") + 1)
-  "silent! exec "normal! \<C-W>_"
+  if NumberOfWindows() != 1
+    exec "resize" . (line("$") + 1)
+    "silent! exec "normal! \<C-W>_"
+  endif
   " Move to the start
   if line("'t") != 0
     " FIXME: For some reason, this doesn't always work.
@@ -395,19 +398,19 @@ function! s:SelBufSetupBuf()
   noremap <buffer> <silent> <CR> :call <SID>SelBufSelectCurrentBuffer(0)<CR>
   noremap <buffer> <silent> <2-LeftMouse> :call <SID>SelBufSelectCurrentBuffer(0)<CR>
   noremap <buffer> <silent> <C-W><CR> :call <SID>SelBufSelectCurrentBuffer(1)<CR>
-  noremap <buffer> <silent> D :call <SID>SelBufDeleteCurrentBuffer(0)<CR>
-  noremap <buffer> <silent> W :call <SID>SelBufDeleteCurrentBuffer(1)<CR>
+  noremap <buffer> <silent> d :call <SID>SelBufDeleteCurrentBuffer(0)<CR>
+  noremap <buffer> <silent> D :call <SID>SelBufDeleteCurrentBuffer(1)<CR>
   noremap <buffer> <silent> i :call <SID>SelBufToggleDetails()<CR>
-  noremap <buffer> <silent> H :call <SID>SelBufToggleHidden()<CR>
-  noremap <buffer> <silent> w :call <SID>SelBufToggleWrap()<CR>
+  noremap <buffer> <silent> u :call <SID>SelBufToggleHidden()<CR>
+  noremap <buffer> <silent> p :call <SID>SelBufToggleWrap()<CR>
   noremap <buffer> <silent> r :call <SID>SelBufUpdateBuffer()<CR>
-  noremap <buffer> <silent> h :call <SID>SelBufToggleHelpHeader()<CR>
+  noremap <buffer> <silent> ? :call <SID>SelBufToggleHelpHeader()<CR>
   cabbr <buffer> <silent> w :
   cabbr <buffer> <silent> wq q
   " FIXME: How can I know what was the original activation key, so that I can
   "  toggle it to mean "Close"? Use F3 for now.
-  nmap <buffer> <silent> <F3> :call <SID>SelBufQuit()<CR>
-  nmap <buffer> <silent> q :call <SID>SelBufQuit()<CR>
+  noremap <buffer> <silent> <F3> :call <SID>SelBufQuit()<CR>
+  noremap <buffer> <silent> q :call <SID>SelBufQuit()<CR>
 
   " Define some local command too for convenience and for easy debugging.
   command! -nargs=0 -buffer S :call <SID>SelBufSelectCurrentBuffer(0)
