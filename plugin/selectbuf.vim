@@ -1,12 +1,12 @@
 " selectbuf.vim
 " Author: Hari Krishna (hari_vim at yahoo dot com)
-" Last Change: 09-Jul-2004 @ 19:16
+" Last Change: 19-Oct-2004 @ 19:16
 " Created: Before 20-Jul-1999
 "          (Ref: http://groups.yahoo.com/group/vim/message/6409
 "                mailto:vim-thread.1235@vim.org)
-" Requires: Vim-6.3, multvals.vim(3.5), genutils.vim(1.12)
+" Requires: Vim-6.3, multvals.vim(3.5), genutils.vim(1.16)
 " Depends On: multiselect.vim(1.0)
-" Version: 3.3.4
+" Version: 3.4.0
 " Licence: This program is free software; you can redistribute it and/or
 "          modify it under the terms of the GNU General Public License.
 "          See http://www.gnu.org/copyleft/gpl.txt 
@@ -27,6 +27,8 @@
 "     buffers using u command).
 "
 " TODO:
+"   - Open browser from one window. Try to open again from another window and
+"     select a buffer. The buffer is shown in the first window.
 "   - It is useful to have space for additional indicators. Useful to show
 "     perforce status.
 "   - s:curBufNameLen is getting reset to 9 else where (hard to reproduce).
@@ -56,7 +58,7 @@ endif
 if !exists('loaded_genutils')
   runtime plugin/genutils.vim
 endif
-if !exists('loaded_genutils') || loaded_genutils < 112
+if !exists('loaded_genutils') || loaded_genutils < 116
   echomsg 'SelectBuf: You need a newer version of genutils.vim plugin'
   finish
 endif
@@ -151,8 +153,11 @@ let g:SelectBuf_title = s:windowName
 "
 if (! exists("no_plugin_maps") || ! no_plugin_maps) &&
       \ (! exists("no_selectbuf_maps") || ! no_selectbuf_maps)
-  if !hasmapto('<Plug>SelectBuf')
+  if !hasmapto('<Plug>SelectBuf', 'n')
     nmap <unique> <silent> <F3> <Plug>SelectBuf
+  endif
+  if !hasmapto('<Plug>SelectBuf', 'i')
+    imap <unique> <silent> <F3> <ESC><Plug>SelectBuf
   endif
   if !hasmapto('<Plug>SelBufLaunchCmd', 'n')
     nmap <unique> <Leader>sbl <Plug>SelBufLaunchCmd
@@ -245,6 +250,7 @@ if !exists('s:myBufNum')
   let s:bufList = ""
   let s:indList = ""
   let s:quiteWinEnter = 0
+  let s:originatingWinNr = 1
 
   " This is the list maintaining the MRU order of buffers.
   let s:MRUlist = ''
@@ -986,8 +992,8 @@ function! s:SelectCurrentBuffer(openMode) " {{{
   if a:openMode == 2
     " Behaves temporarily like "keep"
     let prevWin = winnr()
-    wincmd p
-    if prevWin == winnr() " Only one window exists.
+    exec s:originatingWinNr 'wincmd w'
+    if prevWin == winnr() " No previous window.
       split
     endif
   elseif a:openMode == 1
@@ -1215,6 +1221,24 @@ function! s:SetupBuf() " {{{
     call s:DefMap("n", "THelpKey", "?", ":SBTHelp<CR>")
 
     cnoremap <buffer> <C-R><C-F> <C-R>=expand('#'.SBCurBufNumber().':p')<CR>
+
+    noremap <buffer> 0 gg:silent! call search('^"= ')<CR>
+
+    " From Thomas Link (t dot link02a at gmx at net)
+    " When user types numbers in the browser window start a search for the
+    " buffer by its number.
+    let chars = "123456789"
+    let i = 0
+    let max = strlen(chars)
+    while i < max
+      exec "noremap <buffer> ". chars[i] ." /^". chars[i]
+      let i = i + 1
+    endwhile
+
+    if exists('g:loaded_multiselect') && g:loaded_multiselect >= 100
+      nnoremap <buffer> <silent> <Space> :.MSInvert<CR>
+      vnoremap <buffer> <silent> <Space> :MSInvert<CR>
+    endif
   endif
 
   if !s:disableSummary && !noMaps
@@ -1338,7 +1362,7 @@ function! s:Quit(scriptOrigin) " {{{
 	endif
       endif
     else
-      wincmd p
+      exec s:originatingWinNr 'wincmd w'
     endif
     return 0
   endif
@@ -1619,7 +1643,9 @@ function! s:GoToWindow(winNr)
   if winnr() != a:winNr
     let _eventignore = &eventignore
     try
-      set eventignore+=WinEnter,WinLeave
+      "set eventignore+=WinEnter,WinLeave
+      set eventignore=all
+      let s:originatingWinNr = winnr()
       exec a:winNr . 'wincmd w'
     finally
       let &eventignore = _eventignore
@@ -1994,9 +2020,9 @@ function! s:CmpByName(line1, line2, direction)
   let name1 = expand('#'.s:GetBufferNumber(a:line1).':t')
   let name2 = expand('#'.s:GetBufferNumber(a:line2).':t')
 
-  if (s:ignoreCaseInSort && name1 <? name2) || (name1 < name2)
+  if (s:ignoreCaseInSort && name1 <? name2) || (!s:ignoreCaseInSort && name1 <# name2)
     return -a:direction
-  elseif (s:ignoreCaseInSort && name1 >? name2) || (name1 > name2)
+  elseif (s:ignoreCaseInSort && name1 >? name2) || (!s:ignoreCaseInSort && name1 ># name2)
     return a:direction
   else
     return 0
@@ -2016,10 +2042,10 @@ function! s:CmpByPath(line1, line2, direction)
     endif
 
     if (s:ignoreCaseInSort && name1 <? name2) ||
-          \ (!s:ignoreCaseInSort && name1 < name2)
+          \ (!s:ignoreCaseInSort && name1 <# name2)
       return -a:direction
     elseif (s:ignoreCaseInSort && name1 >? name2) ||
-          \ (!s:ignoreCaseInSort && name1 > name2)
+          \ (!s:ignoreCaseInSort && name1 ># name2)
       return a:direction
     endif
   endif
@@ -2147,7 +2173,7 @@ function! s:SortBuffers(bufNumsHidden)
     setlocal modifiable
     " Do the sort
     if search('^"= ', 'w')
-      silent! .+1,$call QSort(s:GetSortCmpFnByType(
+      silent! .+1,$call BinInsertSort(s:GetSortCmpFnByType(
 	    \ s:GetSortTypeByName(s:sorttype)), s:sortdirection)
     endif
   finally

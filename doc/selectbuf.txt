@@ -1,9 +1,9 @@
 *selectbuf.txt* A fast and feature rich buffer explorer.
                     Requires Vim 6.0
-            Last Change: 16-Mar-2004 @ 19:40
+            Last Change: 28-Oct-2004 @ 09:01
           Since Version: 3.0
-               Revision: 1.3.0
-         Plugin Version: 3.3
+               Revision: 1.3.1
+         Plugin Version: 3.4
                  Author: Hari Krishna Dara (hari_vim at yahoo dot com)
 
                                             *selectbuf-introduction*
@@ -16,34 +16,36 @@ to only the files that are already opened in the current Vim session.
 ==============================================================================
 OVERVIEW                                    *selectbuf-overview*
 
-|selectbuf-installation|    Installing the plugin.
+|selectbuf-installation|     Installing the plugin.
 
-|selectbuf-usage|           A brief usage to get you quickly started.
+|selectbuf-usage|            A brief usage to get you quickly started.
 
-|selectbuf-features|        A description of features.
+|selectbuf-features|         A description of features.
 
-|selectbuf-mappings|        Mappings created in the browser window.
+|selectbuf-mappings|         Mappings created in the browser window.
 
-|selectbuf-commands|        A description of commands that can be issued
-                            on Vim command-line.
+|selectbuf-commands|         A description of commands that can be issued
+                             on Vim command-line.
 
-|selectbuf-settings|        An explanation of how to configure the plugin.
+|selectbuf-settings|         An explanation of how to configure the plugin.
 
-|selectbuf-filetype|        Making use of the "selectbuf" filetype and
-                            configuring the syntax coloring in the browser
-                            window.
+|selectbuf-filetype|         Making use of the "selectbuf" filetype and
+                             configuring the syntax coloring in the browser
+                             window.
 
-|selectbuf-deprecations|    A list of deprecated features.
+|selectbuf-deprecations|     A list of deprecated features.
 
-|perforce-limitations|      Current limitations of the plugin.
+|perforce-limitations|       Current limitations of the plugin.
 
-|selectbuf-changes|         A change list for current version from the previous
-                            versions.
+|selectbuf-changes|          A change list for current version from the previous
+                             versions.
 
-|selectbuf-known-issues|    A list of known issues.
+|selectbuf-known-issues|     A list of known issues.
 
-|selectbuf-wishlist|        Wishlist items that may be worth doing for a future
-                            version.
+|selectbuf-wishlist|         Wishlist items that may be worth doing for a future
+                             version.
+
+|selectbuf-acknowledgements| Acknowledgements.
 ==============================================================================
 
                                             *selectbuf-installation*
@@ -143,6 +145,10 @@ Here is a brief list of important features:
       unnamed buffers), which can be selected as a block if sorted
       by name. If you want to delete all the buffers of a particular type,
       simply sort by type so that they are all adjacent and do a block delete.
+
+      If you have multiselect installed, you can also do multiple block
+      selections. E.g., you can block select all the Java files by executing
+            :MSMatchAdd \.java\>
     - Flexible configuration. Most of the significant features can be turned
       on and off and can be given a default value. The key associations for
       all the commands can be customized. The syntax coloring can be changed.
@@ -262,6 +268,13 @@ and press SelBufDeleteKey again on the buffer. For more information see
 For convenience, <C-R><C-F> (|c_CTRL-R_CTRL-F|) is mapped to expand to the full
 path name of the buffer under the cursor, no matter what the current display
 mode is.
+
+                                            *selectbuf-buffer-search*
+There are a few mappings provided to search for buffers by their number quickly.
+The plugin maps numbers 1 to 9 such that you can simply start typing the buffer
+number to start a search for it. It also maps number 0 such that the cursor is
+taken on to the header. This can be used to quickly move to the start of the
+buffer list before doing a search for the buffer.
 ==============================================================================
 
                                             *selectbuf-commands*
@@ -779,6 +792,10 @@ SelectBuf window.
 If multiselect.vim plugin is installed, the plugin automatically makes use of
 the multiple selections, if any, for the commands that operate on visual
 selections (such as buffer deletion or wipeout and the :SBExec command).
+
+It also maps the <Space> to toggle selections, so you can press spacebar on any
+buffer name and have it added to or cleared from the selection automatically.
+This also works on visual blocks.
 ==============================================================================
 
                                             *selectbuf-deprecations*
@@ -802,6 +819,21 @@ selections (such as buffer deletion or wipeout and the :SBExec command).
 
 ==============================================================================
                                             *selectbuf-changes*
+
+                                            *selectbuf-changes-3.4*
+- Faster sorting of buffer list.
+- If multiselect is installed, you can use spacebar to toggle selection. See
+  |selectbuf-multiselect|.
+- Fixed a bug in case-insensitive sorting of buffer names.
+- Number keys are now mapped to jump to a buffer by its number. See
+  |selectbuf-buffer-search|.
+- Bug fixes.
+    - If SBExec created a new window, it results in a Vim error.
+    - Toggle buffer numbers is broken.
+    - Other misc. bug fixes.
+
+                                            *selectbuf-changes-3.3*
+- New mappings to do a quick buffer search. See |selectbuf-buffer-search|.
 
                                             *selectbuf-changes-3.2*
 - Added a feature to split file paths, instead of the setting
@@ -876,5 +908,24 @@ selections (such as buffer deletion or wipeout and the :SBExec command).
 
                                             *selectbuf-wishlist*
 TBD
+
+                                            *selectbuf-acknowledgements*
+- Thomas Link (t dot link02a at gmx dot net) for his excellent idea with mapping
+  number keys to begin searching for a buffer by its number.
+- Many bug reports by David Fishburn (fishburn at ianywhere dot com).
+- Various others for reporting bugs, ideas and feedback. Some of them are:
+    - Geoff Caplan (geoff at advantae dot com)
+    - Warren (musicww at WellsFargo dot COM)
+    - Paul Nguyen (PNguyen at Santera dot com)
+    - Barrie Stott
+    - Alan Schmitt
+    - Salman Halim (salman at hp dot com)
+    - Todd J. Cosgrove (todd dot cosgrove at softechnics dot com)
+    - Shishir Ramam (sramam at yahoo dot com)
+    - Geoff Caplan (geoff at advantae dot com)
+    - Tim Johnson (tim at johnsons-web dot com)
+    - David Rennalls (drennalls at canada dot com)
+    - Eric Winger (ewinger at keyww dot com)
+    - George Reilly (georgere at windows dot microsoft dot com).
 
  vim6:tw=80:ts=8:ft=help:ai:sw=4:et
