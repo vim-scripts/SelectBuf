@@ -1,9 +1,9 @@
-" selectbuf.vim -- lets you select a buffer visually.
+" sel12-Feb-2002 @ 17:55
 " Author: Hari Krishna <hari_vim@yahoo.com>
-" Last Change: 04-Feb-2002 @ 11:04
+" Last Change: 12-Feb-2002 @ 17:55
 " Created:     20-Jul-1999
 " Requires: Vim-6.0, multvals.vim(2.0.5), genutils.vim(1.0.6)
-" Version: 2.2.3
+" Version: 2.2.4
 " Download latest version from:
 "           http://vim.sourceforge.net/scripts/script.php?script_id=107
 "
@@ -74,6 +74,7 @@ if exists("loaded_selectbuf")
   finish
 endif
 let loaded_selectbuf=1
+
 
 " Call this any time to reconfigure the environment. This re-performs the same
 "   initializations that the script does during the vim startup.
@@ -286,7 +287,7 @@ endif
 let s:originalBuffer = 1
 " characters that must be escaped for a regular expression
 let s:savePositionInSort = 1
-let s:MRUlist = ""
+let s:savedSearchString = ""
 
 let s:sortByNumber=0
 let s:sortByName=1
@@ -304,13 +305,13 @@ let s:sortdirection = 1
 " This is the list maintaining the MRU order of buffers.
 let s:MRUlist = ''
 
-function! s:SelBufMyScriptId()
+function! s:MyScriptId()
   map <SID>xx <SID>xx
   let s:sid = maparg("<SID>xx")
   unmap <SID>xx
   return substitute(s:sid, "xx$", "", "")
 endfunction
-let s:myScriptId = s:SelBufMyScriptId()
+let s:myScriptId = s:MyScriptId()
 
 
 "
@@ -324,31 +325,31 @@ endif
 " Define a command too (easy for debugging).
 "
 if !exists(":SelectBuf")
-  command! -nargs=0 SelectBuf :call <SID>SelBufListBufs()
+  command! -nargs=0 SelectBuf :call <SID>ListBufs()
 endif
 
 " commands to manipulate the MRU list.
 if !exists(":SBBufToHead")
-  command! -nargs=1 SBBufToHead :call <SID>SelBufPushToFrontInMRU(<f-args>)
+  command! -nargs=1 SBBufToHead :call <SID>PushToFrontInMRU(<f-args>)
 endif
 
 if !exists(":SBBufToTail")
-  command! -nargs=1 SBBufToTail :call <SID>SelBufPushToBackInMRU(<f-args>)
+  command! -nargs=1 SBBufToTail :call <SID>PushToBackInMRU(<f-args>)
 endif
 
 " The main plug-in mapping.
-noremap <script> <silent> <Plug>SelectBuf :call <SID>SelBufListBufs()<CR>
+noremap <script> <silent> <Plug>SelectBuf :call <SID>ListBufs()<CR>
 
 " Deleting autocommands first is a good idea especially if we want to reload
 "   the script without restarting vim.
 aug SelectBuf
   au!
-  exec "au BufWinEnter " . s:windowName . " :call <SID>SelBufUpdateBuffer()"
-  exec "au BufWinLeave " . s:windowName . " :call <SID>SelBufDone()"
-  "exec "au WinLeave " . s:windowName . " :call <SID>SelBufRestoreWindows()"
+  exec "au BufWinEnter " . s:windowName . " :call <SID>UpdateBuffer()"
+  exec "au BufWinLeave " . s:windowName . " :call <SID>Done()"
+  "exec "au WinLeave " . s:windowName . " :call <SID>RestoreWindows()"
   if ! s:disableMRU
-    au BufWinEnter * :call <SID>SelBufPushToFrontInMRU(bufnr('%'))
-    au BufWipeout * :call <SID>SelBufDelFromMRU(bufnr(expand("<afile>")))
+    au BufWinEnter * :call <SID>PushToFrontInMRU(bufnr('%'))
+    au BufWipeout * :call <SID>DelFromMRU(bufnr(expand("<afile>")))
   endif
 aug END
 
@@ -362,15 +363,18 @@ call Initialize()
 " Functions start from here.
 "
 
-function! s:SelBufListBufs()
+function! s:ListBufs()
 
   " For use with the display.
   let s:originalBuffer = bufnr("%")
   let s:originalAltBuffer = bufnr("#")
-  " A quick hack to restore the search string.
+  " This will not add it to the history.
+  let prevSearchString = s:savedSearchString
+  " Save the current search string to be able to restore it later.
   if histnr("search") != -1
-    let s:selBufSavedSearchString = histget("search", -1)
+    let s:savedSearchString = histget("search", -1)
   endif
+  let savedUnnamedRegister = @"
 
   " First check if there is a browser already running.
   let browserWinNo = FindWindowForBuffer(
@@ -381,12 +385,12 @@ function! s:SelBufListBufs()
     " If user wants us to save window sizes and restore them later.
     "   But don't save unless "split" mode, as otherwise we are not creating a
     "   new window.
-    if s:restoreWindowSizes && s:SelBufGetModeTypeByName(s:browserMode) == 0
+    if s:restoreWindowSizes && s:GetModeTypeByName(s:browserMode) == 0
       call SaveWindowSettings()
     endif
 
     " Don't split window for "switch" mode.
-    if s:SelBufGetModeTypeByName(s:browserMode) != 1
+    if s:GetModeTypeByName(s:browserMode) != 1
       let splitCommand = ""
       " If user specified a split type, use that.
       if exists("s:splitType")
@@ -415,39 +419,52 @@ function! s:SelBufListBufs()
   else
     " Since we have the browser already open, we have to update the window
     "   explicitly.
-    call s:SelBufUpdateBuffer()
+    call s:UpdateBuffer()
   endif
 
   if line("'t") != 0
-    normal! 't
+    't
   endif
-endfunction " SelBufListBufs
+  if prevSearchString != ""
+    let @/ = prevSearchString
+    call histadd ("search", @/)
+  else
+    let @/ = s:savedSearchString
+  endif
+  let @" = savedUnnamedRegister
+endfunction " ListBufs
 
 
-function! s:SelBufUpdateHeader()
+function! s:UpdateHeader()
+  let _report=&report
+  let &report=99999
+
   " Remember the position.
-  normal! mz
+  mark z
+  let @/ = '^"='
   0
-  silent! 1,/^"=/delete
+  silent! 1,//delete
 
-  call s:SelBufAddHeader()
+  call s:AddHeader()
   0
-  silent! /^"=
-  normal! mt
+  call search('^"=', "W")
+  mark t
 
   " For vertical split, we shouldn't adjust the number of lines.
   if ! s:useVerticalSplit
-    call s:SelBufAdjustWindowSize()
+    call s:AdjustWindowSize()
   endif
 
   " Return to the original position.
   if line("'z") != 0
     normal! `z
   endif
-endfunction " SelBufUpdateHeader
+
+  let &report=_report
+endfunction " UpdateHeader
 
 
-function! s:SelBufAddHeader()
+function! s:AddHeader()
   let helpMsg=""
   let helpKey = maparg("<Plug>SelBufHelpKey")
   if helpKey == ""
@@ -471,7 +488,7 @@ function! s:SelBufAddHeader()
       \ . "\" Press " . helpKey . " to show help\n"
   endif
   let helpMsg = helpMsg . "\"=" . " Sorting=" . s:sortdirlabel .
-              \ s:SelBufGetSortNameByType(s:sorttype) .
+              \ s:GetSortNameByType(s:sorttype) .
               \ ",showDetails=" . s:showDetails .
               \ ",showHidden=" . s:showHidden . ",showDirs=" .
               \ s:showDirectories . ",wrapLines=" . s:wrapLines .
@@ -479,67 +496,71 @@ function! s:SelBufAddHeader()
               \ "\n"
   0
   put! =helpMsg
-endfunction " SelBufAddHeader
+endfunction " AddHeader
 
 
-function! s:SelBufUpdateBuffer()
-  call s:SelBufSetupBuf()
-  let savedReport = &report
+function! s:UpdateBuffer()
+  call s:SetupBuf()
+  let _report=&report
   let &report = 10000
   setlocal modifiable
   " Delete the contents (if any) first.
-  0,$delete
+  silent! 0,$delete
 
-  call s:SelBufAddHeader()
+  call s:AddHeader()
   $d _
-  normal! mt
+  mark t
 
   $
   let headerSize = line("$")
 
   " Loop over all the buffers.
   let i = 1
+  let nBuffers = 0
+  let nBuffersShown = 0
+  let newLine = ""
+  let showBuffer = 0
   while i <= bufnr("$")
-    let newLine = ""
-    let showBuffer = 0
-
-    " If user wants to hide hidden buffers.
-    if s:showHidden && bufexists(i)
-      let showBuffer = 1
-    elseif ! s:showHidden && buflisted(i)
-      let showBuffer = 1
-    endif
-
-    " If user wants to hide directory buffers.
-    if ! s:showDirectories && isdirectory(bufname(i))
+    if bufexists(i)
+      let newLine = ""
       let showBuffer = 0
-    endif
 
-    if showBuffer
-      "let newLine = s:SelBufGetBufLine(i)
-      "call append(line("$"), newLine)
-      " Hopefully this is easier on sorting.
-      call append(line("$"), i)
+      " If user wants to hide hidden buffers.
+      if s:showHidden && bufexists(i)
+        let showBuffer = 1
+      elseif ! s:showHidden && buflisted(i)
+        let showBuffer = 1
+      endif
+
+      " If user wants to hide directory buffers.
+      if ! s:showDirectories && isdirectory(bufname(i))
+        let showBuffer = 0
+      endif
+
+      if showBuffer
+        if exists("g:noOptimize") && g:noOptimize
+        let newLine = s:GetBufLine(i)
+        call append(line("$"), newLine)
+        else
+        " Hopefully this is easier on sorting.
+        call append(line("$"), i)
+        endif
+        let nBuffersShown = nBuffersShown + 1
+      endif
+      let nBuffers = nBuffers + 1
     endif
     let i = i + 1
   endwhile
-  normal! 1G
-  let v:errmsg=""
-  silent! exec "/^" . s:originalBuffer
+  0
   " If found.
-  if v:errmsg == ""
+  if search('^' . s:originalBuffer, "W")
     mark c
-    call histdel("search", -1)
     if line(".") < line("$")
       +mark a " Mark the next line.
     endif
-    " Avoids error messages.
-    silent! exec "-2"
-    if line(".") > headerSize
-      +mark b " Mark the previous line.
-    endif
+    -mark b " Mark the previous line.
   endif
-  let &report = savedReport
+  let &report=_report
   " This is not needed because of the buftype setting.
   "set nomodified
   setlocal nomodifiable
@@ -549,32 +570,35 @@ function! s:SelBufUpdateBuffer()
   let s:savePositionInSort = 0
   call s:SortSelect(0)
   " Finally add the additional info.
-  call s:SelBufAddInfo()
+  if ! exists("g:noOptimize") || ! g:noOptimize
+  call s:AddInfo()
+  endif
   let s:savePositionInSort = _savePositionInSort
 
   " For vertical split, we shouldn't adjust the number of lines.
   "if ! s:useVerticalSplit
     " Now that our Save/RestoreWindowSettings() is working correctly, it should
     "   be fine.
-    call s:SelBufAdjustWindowSize()
+    call s:AdjustWindowSize()
   "endif
-endfunction " SelBufUpdateBuffer
+  redraw | echo "Total buffers: " . nBuffers . " Showing: " . nBuffersShown
+endfunction " UpdateBuffer
 
 
-function! s:SelBufAddInfo()
+function! s:AddInfo()
   setlocal modifiable
   0
-  /^"=
+  call search('^"=', "W")
   while search('^\d\+$', "W") != 0
-    let bufNum = s:SelBufGetCurrentBufferNumber()
-    "echomsg "bufNum = " . bufNum . " bufLine = " . s:SelBufGetBufLine(bufNum)
-    call setline(".", s:SelBufGetBufLine(bufNum))
+    let bufNum = s:GetCurrentBufferNumber()
+    "echomsg "bufNum = " . bufNum . " bufLine = " . s:GetBufLine(bufNum)
+    call setline(".", s:GetBufLine(bufNum))
   endwhile
   setlocal nomodifiable
-endfunction " SelBufAddInfo
+endfunction " AddInfo
 
 
-function! s:SelBufGetBufLine(bufNum)
+function! s:GetBufLine(bufNum)
   let newLine = ""
   let newLine = newLine . a:bufNum . "\t"
   " If user wants to see more details.
@@ -632,12 +656,12 @@ function! s:SelBufGetBufLine(bufNum)
     let newLine = newLine . fnamemodify(bufname(a:bufNum), ":t")
   endif
   return newLine
-endfunction " SelBufGetBufLine
+endfunction " GetBufLine
 
 
-function! s:SelBufAdjustWindowSize()
+function! s:AdjustWindowSize()
   " Set the window size to one more than just required.
-  normal! 1G
+  0
   if NumberOfWindows() != 1
     exec "resize" . (line("$") + 1)
     "silent! exec "normal! \<C-W>_"
@@ -645,13 +669,13 @@ function! s:SelBufAdjustWindowSize()
 endfunction
 
 
-function! s:SelBufSelectCurrentBuffer(openInNewWindow)
+function! s:SelectCurrentBuffer(openInNewWindow)
   if search("^\"=", "W") != 0
     +
     return
   endif
 
-  let selectedBufferNumber = s:SelBufGetCurrentBufferNumber()
+  let selectedBufferNumber = s:GetCurrentBufferNumber()
   if selectedBufferNumber == -1
     +
     return
@@ -659,7 +683,7 @@ function! s:SelBufSelectCurrentBuffer(openInNewWindow)
 
   " Quit window only for "split" mode.
   let didQuit = 0
-  if s:SelBufGetModeTypeByName(s:browserMode) == 0
+  if s:GetModeTypeByName(s:browserMode) == 0
     if ! (a:openInNewWindow || s:openInNewWindow)
       " In any case, if there is only one window, then don't quit.
       if (NumberOfWindows() > 1)
@@ -668,7 +692,7 @@ function! s:SelBufSelectCurrentBuffer(openInNewWindow)
       endif
     endif
     let v:errmsg = ""
-  elseif s:SelBufGetModeTypeByName(s:browserMode) == 2
+  elseif s:GetModeTypeByName(s:browserMode) == 2
     " Switch to the most recently used window.
     wincmd p
   endif
@@ -690,11 +714,11 @@ function! s:SelBufSelectCurrentBuffer(openInNewWindow)
        \ echo "Error Message: " . v:errmsg |
        \ echohl None
   endif
-endfunction " SelBufSelectCurrentBuffer
+endfunction " SelectCurrentBuffer
 
 
-function! s:SelBufDeleteCurrentBuffer(wipeout) range
-  let saveReport = &report
+function! s:DeleteCurrentBuffer(wipeout) range
+  let _report=&report
   let &report = 10000
   call SaveHardPositionWithContext(s:myScriptId)
 
@@ -713,84 +737,82 @@ function! s:SelBufDeleteCurrentBuffer(wipeout) range
   while line <= a:lastline
     silent execute line
 
-    let selectedBufferNumber = s:SelBufGetCurrentBufferNumber()
-    if selectedBufferNumber == -1
-      +
-      return
-    endif
-    let deleteLine = 0
-    let refreshBuffer = 0
-    if a:wipeout
-      exec "bwipeout" selectedBufferNumber
-      let deleteLine = 1
-      let nWipedout = nWipedout + 1
-      let wipedoutMsg = wipedoutMsg . " " . selectedBufferNumber
-    elseif buflisted(selectedBufferNumber)
-      exec "bdelete" selectedBufferNumber
-      if ! s:showHidden
+    let selectedBufferNumber = s:GetCurrentBufferNumber()
+    if selectedBufferNumber != -1
+      let deleteLine = 0
+      let refreshBuffer = 0
+      if a:wipeout
+        exec "bwipeout" selectedBufferNumber
         let deleteLine = 1
+        let nWipedout = nWipedout + 1
+        let wipedoutMsg = wipedoutMsg . " " . selectedBufferNumber
+      elseif buflisted(selectedBufferNumber)
+        exec "bdelete" selectedBufferNumber
+        if ! s:showHidden
+          let deleteLine = 1
+        else
+          let deleteLine = 0
+          let refreshBuffer = 1
+        endif
+        let nDeleted = nDeleted + 1
+        let deletedMsg = deletedMsg . " " . selectedBufferNumber
       else
+        " Undelete buffer.
+        call setbufvar(selectedBufferNumber, "&buflisted", "1")
         let deleteLine = 0
         let refreshBuffer = 1
+        let nUndeleted = nUndeleted + 1
+        let undeletedMsg = undeletedMsg . " " . selectedBufferNumber
       endif
-      let nDeleted = nDeleted + 1
-      let deletedMsg = deletedMsg . " " . selectedBufferNumber
-    else
-      " Undelete buffer.
-      call setbufvar(selectedBufferNumber, "&buflisted", "1")
-      let deleteLine = 0
-      let refreshBuffer = 1
-      let nUndeleted = nUndeleted + 1
-      let undeletedMsg = undeletedMsg . " " . selectedBufferNumber
+      if deleteLine
+        setlocal modifiable
+        silent! delete
+        setlocal nomodifiable
+        " This is not needed because of the buftype setting.
+        "set nomodified
+      endif
     endif
-    if deleteLine
-      setlocal modifiable
-      delete
-      setlocal nomodifiable
-      " This is not needed because of the buftype setting.
-      "set nomodified
-    endif
-
     silent +
     let line = line + 1
   endwhile
 
-  function! s:SelBufGetDeleteMsg(nBufs, msg)
-    let msg = a:nBufs . ((a:nBufs > 1) ? " buffers: " : " buffer: ") .
-            \ a:msg
-    return msg
-  endfunction
-
   let msg = ""
   if nWipedout > 0
-    let msg = msg . s:SelBufGetDeleteMsg(nWipedout, wipedoutMsg)
+    let msg = msg . s:GetDeleteMsg(nWipedout, wipedoutMsg)
     let msg = msg . " wiped out.\n"
   endif
   if nDeleted > 0
-    let msg = msg . s:SelBufGetDeleteMsg(nDeleted, deletedMsg)
+    let msg = msg . s:GetDeleteMsg(nDeleted, deletedMsg)
     let msg = msg . " deleted (unlisted).\n"
   endif
   if nUndeleted > 0
-    let msg = msg . s:SelBufGetDeleteMsg(nUndeleted, undeletedMsg)
+    let msg = msg . s:GetDeleteMsg(nUndeleted, undeletedMsg)
     let msg = msg . " undeleted (listed).\n"
   endif
 
   " If the additional details are being shown, then we may have to update the
   "   buffer.
   if s:showDetails && refreshBuffer
-    call s:SelBufUpdateBuffer()
+    call s:UpdateBuffer()
   endif
 
   call RestoreHardPositionWithContext(s:myScriptId)
-  let &report = saveReport
+  let &report=_report
 
   redraw | echo msg
   "call input(msg)
-endfunction " SelBufDeleteCurrentBuffer
+endfunction " DeleteCurrentBuffer
 
 
-function! s:SelBufQuit()
-  if s:SelBufGetModeTypeByName(s:browserMode) == 1
+function! s:GetDeleteMsg(nBufs, msg)
+  let msg = a:nBufs . ((a:nBufs > 1) ? " buffers: " : " buffer: ") .
+          \ a:msg
+  return msg
+endfunction
+
+
+function! s:Quit()
+  if s:GetModeTypeByName(s:browserMode) == 1
     e#
     return
   endif
@@ -803,9 +825,9 @@ function! s:SelBufQuit()
 endfunction
 
 
-function! s:SelBufSetupBuf()
+function! s:SetupBuf()
   " We don't need to set this as the buftype setting below takes care of it.
-  "set noswapfile
+  setlocal noswapfile
   set nobuflisted
   setlocal buftype=nofile
   " Just in case, this will make sure we are always hidden.
@@ -855,47 +877,47 @@ function! s:SelBufSetupBuf()
   " End Syntax rules.
   "
 
-  call s:SelBufDefineMapFromKey("nnore", "<Plug>SelBufSelectKey", "<CR>", ":call <SID>SelBufSelectCurrentBuffer(0)<CR>")
-  call s:SelBufDefineMapFromKey("nnore", "<Plug>SelBufMSelectKey", "<2-LeftMouse>", ":call <SID>SelBufSelectCurrentBuffer(0)<CR>")
-  call s:SelBufDefineMapFromKey("nnore", "<Plug>SelBufWSelectKey", "<C-W><CR>", ":call <SID>SelBufSelectCurrentBuffer(1)<CR>")
-  call s:SelBufDefineMapFromKey("nnore", "<Plug>SelBufDeleteKey", "d", ":call <SID>SelBufDeleteCurrentBuffer(0)<CR>")
-  call s:SelBufDefineMapFromKey("nnore", "<Plug>SelBufWipeOutKey", "D", ":call <SID>SelBufDeleteCurrentBuffer(1)<CR>")
-  call s:SelBufDefineMapFromKey("vnore", "<Plug>SelBufDeleteKey", "d", ":call <SID>SelBufDeleteCurrentBuffer(0)<CR>")
-  call s:SelBufDefineMapFromKey("vnore", "<Plug>SelBufWipeOutKey", "D", ":call <SID>SelBufDeleteCurrentBuffer(1)<CR>")
-  call s:SelBufDefineMapFromKey("nnore", "<Plug>SelBufTDetailsKey", "i", ":call <SID>SelBufToggleDetails()<CR>")
-  call s:SelBufDefineMapFromKey("nnore", "<Plug>SelBufTHiddenKey", "u", ":call <SID>SelBufToggleHidden()<CR>")
-  call s:SelBufDefineMapFromKey("nnore", "<Plug>SelBufTDirsKey", "c", ":call <SID>SelBufToggleDirectories()<CR>")
-  call s:SelBufDefineMapFromKey("nnore", "<Plug>SelBufTLineWrapKey", "p", ":call <SID>SelBufToggleWrap()<CR>")
-  call s:SelBufDefineMapFromKey("nnore", "<Plug>SelBufTHidePathsKey", "P", ":call <SID>SelBufToggleHidePaths()<CR>")
-  call s:SelBufDefineMapFromKey("nnore", "<Plug>SelBufRefreshKey", "R", ":call <SID>SelBufUpdateBuffer()<CR>")
-  call s:SelBufDefineMapFromKey("nnore", "<Plug>SelBufSortSelectFKey", "s", ":call <SID>SortSelect(1)<cr>")
-  call s:SelBufDefineMapFromKey("nnore", "<Plug>SelBufSortSelectBKey", "S", ":call <SID>SortSelect(-1)<cr>")
-  call s:SelBufDefineMapFromKey("nnore", "<Plug>SelBufSortRevKey", "r", ":call <SID>SortReverse()<cr>")
-  call s:SelBufDefineMapFromKey("nnore", "<Plug>SelBufQuitKey", "q", ":call <SID>SelBufQuit()<CR>")
-  call s:SelBufDefineMapFromKey("nnore", "<Plug>SelBufHelpKey", "?", ":call <SID>SelBufToggleHelpHeader()<CR>")
+  call s:DefineMapFromKey("nnore", "<Plug>SelBufSelectKey", "<CR>", ":call <SID>SelectCurrentBuffer(0)<CR>")
+  call s:DefineMapFromKey("nnore", "<Plug>SelBufMSelectKey", "<2-LeftMouse>", ":call <SID>SelectCurrentBuffer(0)<CR>")
+  call s:DefineMapFromKey("nnore", "<Plug>SelBufWSelectKey", "<C-W><CR>", ":call <SID>SelectCurrentBuffer(1)<CR>")
+  call s:DefineMapFromKey("nnore", "<Plug>SelBufDeleteKey", "d", ":call <SID>DeleteCurrentBuffer(0)<CR>")
+  call s:DefineMapFromKey("nnore", "<Plug>SelBufWipeOutKey", "D", ":call <SID>DeleteCurrentBuffer(1)<CR>")
+  call s:DefineMapFromKey("vnore", "<Plug>SelBufDeleteKey", "d", ":call <SID>DeleteCurrentBuffer(0)<CR>")
+  call s:DefineMapFromKey("vnore", "<Plug>SelBufWipeOutKey", "D", ":call <SID>DeleteCurrentBuffer(1)<CR>")
+  call s:DefineMapFromKey("nnore", "<Plug>SelBufTDetailsKey", "i", ":call <SID>ToggleDetails()<CR>")
+  call s:DefineMapFromKey("nnore", "<Plug>SelBufTHiddenKey", "u", ":call <SID>ToggleHidden()<CR>")
+  call s:DefineMapFromKey("nnore", "<Plug>SelBufTDirsKey", "c", ":call <SID>ToggleDirectories()<CR>")
+  call s:DefineMapFromKey("nnore", "<Plug>SelBufTLineWrapKey", "p", ":call <SID>ToggleWrap()<CR>")
+  call s:DefineMapFromKey("nnore", "<Plug>SelBufTHidePathsKey", "P", ":call <SID>ToggleHidePaths()<CR>")
+  call s:DefineMapFromKey("nnore", "<Plug>SelBufRefreshKey", "R", ":call <SID>UpdateBuffer()<CR>")
+  call s:DefineMapFromKey("nnore", "<Plug>SelBufSortSelectFKey", "s", ":call <SID>SortSelect(1)<cr>")
+  call s:DefineMapFromKey("nnore", "<Plug>SelBufSortSelectBKey", "S", ":call <SID>SortSelect(-1)<cr>")
+  call s:DefineMapFromKey("nnore", "<Plug>SelBufSortRevKey", "r", ":call <SID>SortReverse()<cr>")
+  call s:DefineMapFromKey("nnore", "<Plug>SelBufQuitKey", "q", ":call <SID>Quit()<CR>")
+  call s:DefineMapFromKey("nnore", "<Plug>SelBufHelpKey", "?", ":call <SID>ToggleHelpHeader()<CR>")
 
   " This is not needed because of the buftype setting.
   "cabbr <buffer> <silent> w :
   "cabbr <buffer> <silent> wq q
   " Toggle the same key to mean "Close".
-  nnoremap <buffer> <silent> <Plug>SelectBuf :call <SID>SelBufQuit()<CR>
+  nnoremap <buffer> <silent> <Plug>SelectBuf :call <SID>Quit()<CR>
 
   " Define some local command too for ease of debugging.
-  command! -nargs=0 -buffer SB :call <SID>SelBufSelectCurrentBuffer(0)
-  command! -nargs=0 -buffer SBS :call <SID>SelBufSelectCurrentBuffer(1)
-  command! -nargs=0 -buffer D :call <SID>SelBufDeleteCurrentBuffer(0)
-  command! -nargs=0 -buffer DD :call <SID>SelBufDeleteCurrentBuffer(1)
+  command! -nargs=0 -buffer SB :call <SID>SelectCurrentBuffer(0)
+  command! -nargs=0 -buffer SBS :call <SID>SelectCurrentBuffer(1)
+  command! -nargs=0 -buffer D :call <SID>DeleteCurrentBuffer(0)
+  command! -nargs=0 -buffer DD :call <SID>DeleteCurrentBuffer(1)
   command! -nargs=0 -buffer SS :call <SID>SortSelect(1)
   command! -nargs=0 -buffer SSR :call <SID>SortSelect(-1)
   command! -nargs=0 -buffer SR :call <SID>SortReverse()
-  command! -nargs=0 -buffer SQ :call <SID>SelBufQuit()
+  command! -nargs=0 -buffer SQ :call <SID>Quit()
 
   " Arrange a notification of the window close on this window.
-  call AddNotifyWindowClose(s:windowName, s:myScriptId . "SelBufRestoreWindows")
-endfunction " SelBufSetupBuf
+  call AddNotifyWindowClose(s:windowName, s:myScriptId . "RestoreWindows")
+endfunction " SetupBuf
 
 
-function! s:SelBufDefineMapFromKey(mapType, mapKeyName, defaultKey, cmdStr)
+function! s:DefineMapFromKey(mapType, mapKeyName, defaultKey, cmdStr)
   let key = maparg(a:mapKeyName)
   " If user hasn't specified a key, use the default key passed in.
   if key == ""
@@ -905,63 +927,63 @@ function! s:SelBufDefineMapFromKey(mapType, mapKeyName, defaultKey, cmdStr)
 endfunction
 
 
-function! s:SelBufToggleHelpHeader()
+function! s:ToggleHelpHeader()
   let s:showHelp = ! s:showHelp
   " Don't save/restore position in this case, because otherwise the user may
   "   not be able to view the help if he has listing that is more than one page
   "   (after all what is he viewing the help for ?)
   setlocal modifiable
-  call s:SelBufUpdateHeader()
+  call s:UpdateHeader()
   setlocal nomodifiable
 endfunction
 
 
-function! s:SelBufToggleDetails()
+function! s:ToggleDetails()
   let s:showDetails = ! s:showDetails
   call SaveHardPositionWithContext(s:myScriptId)
-  call s:SelBufUpdateBuffer()
+  call s:UpdateBuffer()
   call RestoreHardPositionWithContext(s:myScriptId)
 endfunction
 
 
-function! s:SelBufToggleHidden()
+function! s:ToggleHidden()
   let s:showHidden = ! s:showHidden
   call SaveHardPositionWithContext(s:myScriptId)
-  call s:SelBufUpdateBuffer()
+  call s:UpdateBuffer()
   call RestoreHardPositionWithContext(s:myScriptId)
 endfunction
 
 
-function! s:SelBufToggleDirectories()
+function! s:ToggleDirectories()
   let s:showDirectories = ! s:showDirectories
   call SaveHardPositionWithContext(s:myScriptId)
-  call s:SelBufUpdateBuffer()
+  call s:UpdateBuffer()
   call RestoreHardPositionWithContext(s:myScriptId)
 endfunction
 
 
-function! s:SelBufToggleWrap()
+function! s:ToggleWrap()
   let &l:wrap = ! &l:wrap
   let s:wrapLines = &l:wrap
   call SaveHardPositionWithContext(s:myScriptId)
   setlocal modifiable
-  call s:SelBufUpdateHeader()
+  call s:UpdateHeader()
   setlocal nomodifiable
   call RestoreHardPositionWithContext(s:myScriptId)
 endfunction
 
 
-function! s:SelBufToggleHidePaths()
+function! s:ToggleHidePaths()
   let s:showPaths = ! s:showPaths
   call SaveHardPositionWithContext(s:myScriptId)
-  call s:SelBufUpdateBuffer()
+  call s:UpdateBuffer()
   call RestoreHardPositionWithContext(s:myScriptId)
 endfunction
 
 
 " FIXME: Should I do this even for "keep" mode?
-function! s:SelBufDone()
-  call s:SelBufHACKSearchString()
+function! s:Done()
+  call s:RestoreSearchString()
 
   " If user wants this buffer be removed...
   if s:removeBrowserBuffer
@@ -971,33 +993,27 @@ function! s:SelBufDone()
 endfunction
 
 
-function! s:SelBufRestoreWindows(dummyTitle)
+function! s:RestoreWindows(dummyTitle)
   " If user wants us to restore window sizes during the exit.
-  if s:restoreWindowSizes && s:SelBufGetModeTypeByName(s:browserMode) != 2
-  "redraw | echomsg "nWindows: " . NumberOfWindows()
+  if s:restoreWindowSizes && s:GetModeTypeByName(s:browserMode) != 2
   call RestoreWindowSettings()
   endif
 endfunction
 
 
-" HACK.
-function! s:SelBufHACKSearchString()
-  " A quick hack to restore the search string.
-  if exists ("s:selBufSavedSearchString")
-    if histget ("search", -1) != s:selBufSavedSearchString
-      let @/ = s:selBufSavedSearchString
-      call histadd ("search", s:selBufSavedSearchString)
-      unlet s:selBufSavedSearchString
-    endif
-  endif
+function! s:RestoreSearchString()
+  let @/ = s:savedSearchString
+  let s:savedSearchString = histget("search", -1)
+  " Fortunately, this will make sure there is only one copy in the history.
+  call histadd ("search", @/)
 endfunction
 
 
-function! s:SelBufGetCurrentBufferNumber()
-  return s:SelBufGetBufferNumber(getline("."))
+function! s:GetCurrentBufferNumber()
+  return s:GetBufferNumber(getline("."))
 endfunction
 
-function! s:SelBufGetBufferNumber(line)
+function! s:GetBufferNumber(line)
   let bufNumber = matchstr(a:line, '^\d\+')
   if bufNumber == ""
     return -1
@@ -1011,7 +1027,7 @@ endfunction
 " Utility methods.
 "
 
-function! s:SelBufGetModeNameByType(modeType)
+function! s:GetModeNameByType(modeType)
   if a:modeType == 0
     return "split"
   elseif a:modeType == 1
@@ -1025,7 +1041,7 @@ function! s:SelBufGetModeNameByType(modeType)
   endif
 endfunction
 
-function! s:SelBufGetModeTypeByName(modeName)
+function! s:GetModeTypeByName(modeName)
   if match(a:modeName, '\d') != -1
     return (a:modeName + 0)
   elseif a:modeName == "split"
@@ -1040,7 +1056,7 @@ function! s:SelBufGetModeTypeByName(modeName)
 endfunction
 
 
-function! s:SelBufPushToFrontInMRU(bufNum)
+function! s:PushToFrontInMRU(bufNum)
   " Avoid browser buffer to come in the front.
   if a:bufNum == FindBufferForName(s:windowName)
       return
@@ -1051,27 +1067,27 @@ function! s:SelBufPushToFrontInMRU(bufNum)
 endfunction
 
 
-function! s:SelBufPushToBackInMRU(bufNum)
+function! s:PushToBackInMRU(bufNum)
   let s:MRUlist = MvPullToBack(s:MRUlist, ',', a:bufNum)
   let g:MRUlist = s:MRUlist " For debugging.
 endfunction
 
 
-function! s:SelBufDelFromMRU(bufNum)
+function! s:DelFromMRU(bufNum)
   let s:MRUlist = MvRemoveElement(s:MRUlist, ',', a:bufNum)
   let g:MRUlist = s:MRUlist " For debugging.
 endfunction
 
 
 """
-""" Support for sorting...from explorer.vim (2.5)
-""" Minimize the changes necessary, to make future merges easier.
+""" Support for sorting... based on the explorer.vim implementation (2.5)
+""" Changed the sort algorithm to speed sorting up.
 """
 
 ""
 "" Utility methods.
 ""
-function! s:SelBufGetSortNameByType(sorttype)
+function! s:GetSortNameByType(sorttype)
   if a:sorttype == 0
     return "number"
   elseif a:sorttype == 1
@@ -1091,7 +1107,7 @@ function! s:SelBufGetSortNameByType(sorttype)
   endif
 endfunction
 
-function! s:SelBufGetSortTypeByName(sortname)
+function! s:GetSortTypeByName(sortname)
   if match(a:sortname, '\d') != -1
     return (a:sortname + 0)
   elseif a:sortname == "number"
@@ -1111,19 +1127,19 @@ function! s:SelBufGetSortTypeByName(sortname)
   endif
 endfunction
 
-function! s:SelBufGetSortCmpFnByType(sorttype)
+function! s:GetSortCmpFnByType(sorttype)
   if a:sorttype == 0
-    return "s:SelBufCmpByNumber"
+    return "s:CmpByNumber"
   elseif a:sorttype == 1
-    return "s:SelBufCmpByName"
+    return "s:CmpByName"
   elseif a:sorttype == 2
-    return "s:SelBufCmpByPath"
+    return "s:CmpByPath"
   elseif a:sorttype == 3
-    return "s:SelBufCmpByType"
+    return "s:CmpByType"
   elseif a:sorttype == 4
-    return "s:SelBufCmpByIndicators"
+    return "s:CmpByIndicators"
   elseif a:sorttype == 5
-    return "s:SelBufCmpByMRU"
+    return "s:CmpByMRU"
   else
     return ""
   endif
@@ -1134,7 +1150,7 @@ endfunction
 "" Compare methods added.
 ""
 
-function! s:SelBufCmpByName(line1, line2, direction)
+function! s:CmpByName(line1, line2, direction)
   let name1 = substitute(a:line1, '^.*\t.\{-}\([^/\\]*$\)', '\1', '')
   let name2 = substitute(a:line2, '^.*\t.\{-}\([^/\\]*$\)', '\1', '')
 
@@ -1147,7 +1163,7 @@ function! s:SelBufCmpByName(line1, line2, direction)
   endif
 endfunction
 
-function! s:SelBufCmpByPath(line1, line2, direction)
+function! s:CmpByPath(line1, line2, direction)
   let name1 = substitute(a:line1, '^.*\t', '', '')
   let name2 = substitute(a:line2, '^.*\t', '', '')
 
@@ -1160,9 +1176,9 @@ function! s:SelBufCmpByPath(line1, line2, direction)
   endif
 endfunction
 
-function! s:SelBufCmpByNumber(line1, line2, direction)
-  let num1 = s:SelBufGetBufferNumber(a:line1)
-  let num2 = s:SelBufGetBufferNumber(a:line2)
+function! s:CmpByNumber(line1, line2, direction)
+  let num1 = s:GetBufferNumber(a:line1)
+  let num2 = s:GetBufferNumber(a:line2)
 
   if num1 < num2
     return -a:direction
@@ -1173,7 +1189,7 @@ function! s:SelBufCmpByNumber(line1, line2, direction)
   endif
 endfunction
 
-function! s:SelBufCmpByType(line1, line2, direction)
+function! s:CmpByType(line1, line2, direction)
   " Establish the extensions.
   "let type1 = matchstr(a:line1, '\.[^.]\+$')
   "let type1 = strpart(type1, 1)
@@ -1209,7 +1225,7 @@ function! s:SelBufCmpByType(line1, line2, direction)
   endif
 endfunction
 
-function! s:SelBufCmpByIndicators(line1, line2, direction)
+function! s:CmpByIndicators(line1, line2, direction)
   let ind1 = substitute(a:line1, '^\d\+\t\+\([^\t]\+\)\t\+.*$', '\1', '')
   let ind2 = substitute(a:line2, '^\d\+\t\+\([^\t]\+\)\t\+.*$', '\1', '')
 
@@ -1223,9 +1239,9 @@ function! s:SelBufCmpByIndicators(line1, line2, direction)
 endfunction
 
 
-function! s:SelBufCmpByMRU(line1, line2, direction)
-  let num1 = s:SelBufGetBufferNumber(a:line1)
-  let num2 = s:SelBufGetBufferNumber(a:line2)
+function! s:CmpByMRU(line1, line2, direction)
+  let num1 = s:GetBufferNumber(a:line1)
+  let num2 = s:GetBufferNumber(a:line2)
 
   return MvCmpByPosition(s:MRUlist, ',', num1, num2, a:direction)
 endfunction
@@ -1253,7 +1269,7 @@ endfunction
 "
 function! s:SortSelect(inc)
   " Select the next sort option
-  let s:sorttype = s:SelBufGetSortTypeByName(s:sorttype)
+  let s:sorttype = s:GetSortTypeByName(s:sorttype)
   let s:sorttype = s:sorttype + a:inc
 
   " Wrap the sort type.
@@ -1292,11 +1308,12 @@ function! s:SortListing(msg)
 
     " Do the sort
     0
-    silent! /^"=/+1,$call s:Sort(s:SelBufGetSortCmpFnByType(
-      \ s:SelBufGetSortTypeByName(s:sorttype)), s:sortdirection)
+    let @/ = '^"='
+    silent! //+1,$call s:Sort(s:GetSortCmpFnByType(
+      \ s:GetSortTypeByName(s:sorttype)), s:sortdirection)
 
     " Replace the header with updated information
-    call s:SelBufUpdateHeader()
+    call s:UpdateHeader()
 
     " Restore section separators
     "call s:AddSeparators()
@@ -1312,6 +1329,7 @@ function! s:SortListing(msg)
     setlocal nomodifiable
 endfunction
 
+
 ""
 "" Sort infrastructure.
 ""
@@ -1321,45 +1339,63 @@ endfunction
 " Sort lines.  SortR() is called recursively.
 "
 function! s:SortR(start, end, cmp, direction)
+  if a:end > a:start
+    let low = a:start
+    let high = a:end
 
-  " Bottom of the recursion if start reaches end
-  if a:start >= a:end
-    return
-  endif
-  "
-  let partition = a:start - 1
-  let middle = partition
-  let partStr = getline((a:start + a:end) / 2)
-  let i = a:start
-  while (i <= a:end)
-    let str = getline(i)
-    exec "let result = " . a:cmp . "(str, partStr, " . a:direction . ")"
-    if result <= 0
-      " Need to put it before the partition.  Swap lines i and partition.
-      let partition = partition + 1
-      if result == 0
-        let middle = partition
+    " Arbitrarily establish partition element at the midpoint of the data.
+    let midStr = getline((a:start + a:end) / 2)
+
+    " Loop through the data until indices cross.
+    while low <= high
+
+      " Find the first element that is greater than or equal to the partition
+      "   element starting from the left Index.
+      while low < a:end
+        let str = getline(low)
+        exec "let result = " . a:cmp . "(str, midStr, " . a:direction . ")"
+        if result < 0
+          let low = low + 1
+        else
+          break
+        endif
+      endwhile
+
+      " Find an element that is smaller than or equal to the partition element
+      "   starting from the right Index.
+      while high > a:start
+        let str = getline(high)
+        exec "let result = " . a:cmp . "(str, midStr, " . a:direction . ")"
+        if result > 0
+          let high = high - 1
+        else
+          break
+        endif
+      endwhile
+
+      " If the indexes have not crossed, swap.
+      if low <= high
+        " Swap lines low and high.
+        let str2 = getline(high)
+        call setline(high, getline(low))
+        call setline(low, str2)
+        let low = low + 1
+        let high = high - 1
       endif
-      if i != partition
-        let str2 = getline(partition)
-        call setline(i, str2)
-        call setline(partition, str)
-      endif
+    endwhile
+
+    " If the right index has not reached the left side of data must now sort
+    "   the left partition.
+    if a:start < high
+      call s:SortR(a:start, high, a:cmp, a:direction)
     endif
-    let i = i + 1
-  endwhile
 
-  " Now we have a pointer to the "middle" element, as far as partitioning
-  " goes, which could be anywhere before the partition.  Make sure it is at
-  " the end of the partition.
-  if middle != partition
-    let str = getline(middle)
-    let str2 = getline(partition)
-    call setline(middle, str2)
-    call setline(partition, str)
+    " If the left index has not reached the right side of data must now sort
+    "   the right partition.
+    if low < a:end
+      call s:SortR(low, a:end, a:cmp, a:direction)
+    endif
   endif
-  call s:SortR(a:start, partition - 1, a:cmp,a:direction)
-  call s:SortR(partition + 1, a:end, a:cmp,a:direction)
 endfunction
 
 "---
@@ -1368,4 +1404,5 @@ endfunction
 "
 function! s:Sort(cmp,direction) range
   call s:SortR(a:firstline, a:lastline, a:cmp, a:direction)
+
 endfunction
