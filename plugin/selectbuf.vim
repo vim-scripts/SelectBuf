@@ -2,7 +2,7 @@
 " Author: Hari Krishna <hari_vim@yahoo.com>
 " Last Change: 26-Oct-2001 @ 12:04
 " Requires: Vim-6.0 or higher, lightWeightArray.vim(1.0.1),
-"           bufNwinUtils.vim(1.0.1)
+"           bufNwinUtils.vim(1.0.2)
 " Version: 2.1.9
 "
 "  Source this file or drop it in plugin directory and press <F3> to get the
