@@ -1,9 +1,9 @@
 " selectbuf.vim -- lets you select a buffer visually.
 " Author: Hari Krishna <hari_vim@yahoo.com>
-" Last Change: 08-Nov-2001 @ 18:59
+" Last Change: 13-Nov-2001 @ 23:15
 " Requires: Vim-6.0 or higher, lightWeightArray.vim(1.0.1),
 "           bufNwinUtils.vim(1.0.3)
-" Version: 2.1.10
+" Version: 2.1.11
 " Download latest version from:
 "           http://vim.sourceforge.net/scripts/script.php?script_id=107
 "
@@ -27,6 +27,7 @@
 "   variables, and so will be unset after the script is loaded, to avoid
 "   cluttering the global name space.
 "
+"     nmap <silent> <unique> ,sb <Plug>SelectBuf
 "     let selBufWindowName = '---\ Select\ Buffer\ ---'
 "     let selBufOpenInNewWindow = 0
 "     let selBufRemoveBrowserBuffer = 0
@@ -41,6 +42,30 @@
 "     let selBufAlwaysShowPaths = 1
 "     let g:selBufBrowserMode = "keep" " split, switch, keep
 "     let g:selBufUseVerticalSplit = 1
+"
+" You can also change the default key mappings for all the operations, e.g.,
+"
+"     nmap <script> <silent> <Plug>SelBufHelpKey <C-H> " Default: ?
+"
+" Here is the complete list of all the key map and their default key:
+"     <Plug>SelBufSelectKey		Default: <CR>
+"     <Plug>SelBufMSelectKey		Default: <2-LeftMouse>
+"     <Plug>SelBufWSelectKey		Default: <C-W><CR>
+"     <Plug>SelBufDeleteKey		Default: d
+"     <Plug>SelBufWipeOutKey		Default: D
+"     <Plug>SelBufDeleteKey		Default: d
+"     <Plug>SelBufWipeOutKey		Default: D
+"     <Plug>SelBufTDetailsKey		Default: i
+"     <Plug>SelBufTHiddenKey		Default: u
+"     <Plug>SelBufTDirsKey		Default: c
+"     <Plug>SelBufTLineWrapKey		Default: p
+"     <Plug>SelBufTHidePathsKey		Default: P
+"     <Plug>SelBufRefreshKey		Default: R
+"     <Plug>SelBufSortSelectFKey	Default: s
+"     <Plug>SelBufSortSelectBKey	Default: S
+"     <Plug>SelBufSortRevKey		Default: r
+"     <Plug>SelBufQuitKey		Default: q
+"     <Plug>SelBufHelpKey		Default: ?
 "
 
 if exists("loaded_selectbuf")
@@ -218,6 +243,7 @@ else
   let s:useVerticalSplit = 0
 endif
 
+
 "
 " END configuration.
 "
@@ -263,12 +289,12 @@ endif
 "
 " Define a command too (easy for debugging).
 "
-if !exists("SelBuf")
+if !exists(":SelBuf")
   command! -nargs=0 SelectBuf :call <SID>SelBufListBufs()
 endif
 
 " The main plug-in mapping.
-nmap <script> <silent> <Plug>SelectBuf :call <SID>SelBufListBufs()<CR>
+noremap <script> <silent> <Plug>SelectBuf :call <SID>SelBufListBufs()<CR>
 
 " Deleting autocommands first is a good idea especially if we want to reload
 "   the script without restarting vim.
@@ -532,8 +558,8 @@ endfunction
 
 
 function! s:SelBufSelectCurrentBuffer(openInNewWindow)
-  let s:selectedBufferNumber = s:SelBufGetBufferNumber()
-  if s:selectedBufferNumber == -1
+  let selectedBufferNumber = s:SelBufGetBufferNumber()
+  if selectedBufferNumber == -1
     +
     return
   endif
@@ -552,53 +578,113 @@ function! s:SelBufSelectCurrentBuffer(openInNewWindow)
     wincmd p
   endif
 
-  silent! exec "buffer" s:selectedBufferNumber
+  silent! exec "buffer" selectedBufferNumber
 
   if v:errmsg != ""
     split
-    exec "buffer" s:selectedBufferNumber
-    echohl Error |
-       \ echo "Couldn't open buffer " . s:selectedBufferNumber .
+    exec "buffer" selectedBufferNumber
+    redraw | echohl Error |
+       \ echo "Couldn't open buffer " . selectedBufferNumber .
        \   " in window " . winnr() ", creating a new window." |
        \ echo "Error Message: " . v:errmsg |
        \ echohl None
   endif
-  unlet s:selectedBufferNumber
 endfunction
 
 
-function! s:SelBufDeleteCurrentBuffer(wipeout)
+function! s:SelBufDeleteCurrentBuffer(wipeout) range
   let saveReport = &report
   let &report = 10000
-  let s:selectedBufferNumber = s:SelBufGetBufferNumber()
-  if s:selectedBufferNumber == -1
-    +
-    return
+  call SaveHardPositionWithContext(s:myScriptId)
+
+  if a:firstline == 0 || a:lastline == 0
+    let a:firstline = line(".")
+    let a:lastline = line(".")
   endif
-  let deleteLine = 0
-  if a:wipeout
-    exec "bwipeout" s:selectedBufferNumber
-    echo "Buffer " . s:selectedBufferNumber . " wiped out."
-    let deleteLine = 1
-  elseif buflisted(s:selectedBufferNumber)
-    exec "bdelete" s:selectedBufferNumber
-    echo "Buffer " . s:selectedBufferNumber . " deleted (unlisted)."
-    if ! s:showHidden
-      let deleteLine = 1
+
+  let line = a:firstline
+  let nDeleted = 0
+  let nUndeleted = 0
+  let nWipedout = 0
+  let deletedMsg = ""
+  let undeletedMsg = ""
+  let wipedoutMsg = ""
+  while line <= a:lastline
+    silent execute line
+
+    let selectedBufferNumber = s:SelBufGetBufferNumber()
+    if selectedBufferNumber == -1
+      +
+      return
     endif
-  else
-    " Undelete buffer.
-    call setbufvar(s:selectedBufferNumber, "&buflisted", "1")
-    echo "Buffer " . s:selectedBufferNumber . " undeleted (listed)."
+    let deleteLine = 0
+    let refreshBuffer = 0
+    if a:wipeout
+      exec "bwipeout" selectedBufferNumber
+      let deleteLine = 1
+      let nWipedout = nWipedout + 1
+      let wipedoutMsg = wipedoutMsg . " " . selectedBufferNumber
+    elseif buflisted(selectedBufferNumber)
+      exec "bdelete" selectedBufferNumber
+      if ! s:showHidden
+        let deleteLine = 1
+      else
+        let deleteLine = 0
+        let refreshBuffer = 1
+      endif
+      let nDeleted = nDeleted + 1
+      let deletedMsg = deletedMsg . " " . selectedBufferNumber
+    else
+      " Undelete buffer.
+      call setbufvar(selectedBufferNumber, "&buflisted", "1")
+      let deleteLine = 0
+      let refreshBuffer = 1
+      let nUndeleted = nUndeleted + 1
+      let undeletedMsg = undeletedMsg . " " . selectedBufferNumber
+    endif
+    if deleteLine
+      setlocal modifiable
+      delete
+      setlocal nomodifiable
+      " This is not needed because of the buftype setting.
+      "set nomodified
+    endif
+
+    silent +
+    let line = line + 1
+  endwhile
+
+  function! s:SelBufGetDeleteMsg(nBufs, msg)
+    let msg = a:nBufs . ((a:nBufs > 1) ? " buffers: " : " buffer: ") .
+            \ a:msg
+    return msg
+  endfunction
+
+  let msg = ""
+  if nWipedout > 0
+    let msg = msg . s:SelBufGetDeleteMsg(nWipedout, wipedoutMsg)
+    let msg = msg . " wiped out.\n"
   endif
-  if deleteLine
-    setlocal modifiable
-    delete
-    setlocal nomodifiable
-    " This is not needed because of the buftype setting.
-    "set nomodified
+  if nDeleted > 0
+    let msg = msg . s:SelBufGetDeleteMsg(nDeleted, deletedMsg)
+    let msg = msg . " deleted (unlisted).\n"
   endif
+  if nUndeleted > 0
+    let msg = msg . s:SelBufGetDeleteMsg(nUndeleted, undeletedMsg)
+    let msg = msg . " undeleted (listed).\n"
+  endif
+
+  " If the additional details are being shown, then we may have to update the
+  "   buffer.
+  if s:showDetails && refreshBuffer
+    call s:SelBufUpdateBuffer()
+  endif
+
+  call RestoreHardPositionWithContext(s:myScriptId)
   let &report = saveReport
+
+  redraw | echo msg
+  "call input(msg)
 endfunction
 
 
@@ -615,7 +701,7 @@ function! s:SelBufQuit()
       call RestoreWindowSettings()
     endif
   else
-    echo "Can't quit the last window"
+    redraw | echo "Can't quit the last window"
   endif
 endfunction
 
@@ -672,22 +758,25 @@ function! s:SelBufSetupBuf()
   " End Syntax rules.
   "
 
-  nnoremap <buffer> <silent> <CR> :call <SID>SelBufSelectCurrentBuffer(0)<CR>
-  nnoremap <buffer> <silent> <2-LeftMouse> :call <SID>SelBufSelectCurrentBuffer(0)<CR>
-  nnoremap <buffer> <silent> <C-W><CR> :call <SID>SelBufSelectCurrentBuffer(1)<CR>
-  nnoremap <buffer> <silent> d :call <SID>SelBufDeleteCurrentBuffer(0)<CR>
-  nnoremap <buffer> <silent> D :call <SID>SelBufDeleteCurrentBuffer(1)<CR>
-  nnoremap <buffer> <silent> i :call <SID>SelBufToggleDetails()<CR>
-  nnoremap <buffer> <silent> u :call <SID>SelBufToggleHidden()<CR>
-  nnoremap <buffer> <silent> c :call <SID>SelBufToggleDirectories()<CR>
-  nnoremap <buffer> <silent> p :call <SID>SelBufToggleWrap()<CR>
-  nnoremap <buffer> <silent> P :call <SID>SelBufToggleHidePaths()<CR>
-  nnoremap <buffer> <silent> R :call <SID>SelBufUpdateBuffer()<CR>
-  nnoremap <buffer> <silent> s :call <SID>SortSelect(1)<cr>
-  nnoremap <buffer> <silent> S :call <SID>SortSelect(-1)<cr>
-  nnoremap <buffer> <silent> r :call <SID>SortReverse()<cr>
-  nnoremap <buffer> <silent> ? :call <SID>SelBufToggleHelpHeader()<CR>
-  nnoremap <buffer> <silent> q :call <SID>SelBufQuit()<CR>
+  call s:SelBufDefineMapFromKey("nnore", "<Plug>SelBufSelectKey", "<CR>", ":call <SID>SelBufSelectCurrentBuffer(0)<CR>")
+  call s:SelBufDefineMapFromKey("nnore", "<Plug>SelBufMSelectKey", "<2-LeftMouse>", ":call <SID>SelBufSelectCurrentBuffer(0)<CR>")
+  call s:SelBufDefineMapFromKey("nnore", "<Plug>SelBufWSelectKey", "<C-W><CR>", ":call <SID>SelBufSelectCurrentBuffer(1)<CR>")
+  call s:SelBufDefineMapFromKey("nnore", "<Plug>SelBufDeleteKey", "d", ":call <SID>SelBufDeleteCurrentBuffer(0)<CR>")
+  call s:SelBufDefineMapFromKey("nnore", "<Plug>SelBufWipeOutKey", "D", ":call <SID>SelBufDeleteCurrentBuffer(1)<CR>")
+  call s:SelBufDefineMapFromKey("vnore", "<Plug>SelBufDeleteKey", "d", ":call <SID>SelBufDeleteCurrentBuffer(0)<CR>")
+  call s:SelBufDefineMapFromKey("vnore", "<Plug>SelBufWipeOutKey", "D", ":call <SID>SelBufDeleteCurrentBuffer(1)<CR>")
+  call s:SelBufDefineMapFromKey("nnore", "<Plug>SelBufTDetailsKey", "i", ":call <SID>SelBufToggleDetails()<CR>")
+  call s:SelBufDefineMapFromKey("nnore", "<Plug>SelBufTHiddenKey", "u", ":call <SID>SelBufToggleHidden()<CR>")
+  call s:SelBufDefineMapFromKey("nnore", "<Plug>SelBufTDirsKey", "c", ":call <SID>SelBufToggleDirectories()<CR>")
+  call s:SelBufDefineMapFromKey("nnore", "<Plug>SelBufTLineWrapKey", "p", ":call <SID>SelBufToggleWrap()<CR>")
+  call s:SelBufDefineMapFromKey("nnore", "<Plug>SelBufTHidePathsKey", "P", ":call <SID>SelBufToggleHidePaths()<CR>")
+  call s:SelBufDefineMapFromKey("nnore", "<Plug>SelBufRefreshKey", "R", ":call <SID>SelBufUpdateBuffer()<CR>")
+  call s:SelBufDefineMapFromKey("nnore", "<Plug>SelBufSortSelectFKey", "s", ":call <SID>SortSelect(1)<cr>")
+  call s:SelBufDefineMapFromKey("nnore", "<Plug>SelBufSortSelectBKey", "S", ":call <SID>SortSelect(-1)<cr>")
+  call s:SelBufDefineMapFromKey("nnore", "<Plug>SelBufSortRevKey", "r", ":call <SID>SortReverse()<cr>")
+  call s:SelBufDefineMapFromKey("nnore", "<Plug>SelBufQuitKey", "q", ":call <SID>SelBufQuit()<CR>")
+  call s:SelBufDefineMapFromKey("nnore", "<Plug>SelBufHelpKey", "?", ":call <SID>SelBufToggleHelpHeader()<CR>")
+
   " This is not needed because of the buftype setting.
   "cabbr <buffer> <silent> w :
   "cabbr <buffer> <silent> wq q
@@ -702,6 +791,16 @@ function! s:SelBufSetupBuf()
   command! -nargs=0 -buffer SS :call <SID>SortSelect(1)
   command! -nargs=0 -buffer SSR :call <SID>SortSelect(-1)
   command! -nargs=0 -buffer SR :call <SID>SortReverse()
+endfunction
+
+
+function! s:SelBufDefineMapFromKey(mapType, mapKeyName, defaultKey, cmdStr)
+  let key = maparg(a:mapKeyName)
+  " If user hasn't specified a key, use the default key passed in.
+  if key == ""
+    let key = a:defaultKey
+  endif
+  exec a:mapType . "map <buffer> <silent>" key a:cmdStr
 endfunction
 
 
