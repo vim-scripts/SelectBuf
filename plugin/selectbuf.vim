@@ -1,9 +1,9 @@
 " selectbuf.vim -- lets you select a buffer visually.
 " Author: Hari Krishna <hari_vim@yahoo.com>
-" Last Change: 13-Nov-2001 @ 23:15
-" Requires: Vim-6.0 or higher, lightWeightArray.vim(1.0.1),
-"           bufNwinUtils.vim(1.0.3)
-" Version: 2.1.11
+" Last Change: 01-Feb-2002 @ 19:26
+" Created:     20-Jul-1999
+" Requires: Vim-6.0, multvals.vim(2.0.5), genutils.vim(1.0.6)
+" Version: 2.2.2
 " Download latest version from:
 "           http://vim.sourceforge.net/scripts/script.php?script_id=107
 "
@@ -28,20 +28,22 @@
 "   cluttering the global name space.
 "
 "     nmap <silent> <unique> ,sb <Plug>SelectBuf
-"     let selBufWindowName = '---\ Select\ Buffer\ ---'
-"     let selBufOpenInNewWindow = 0
-"     let selBufRemoveBrowserBuffer = 0
-"     let selBufHighlightOnlyFilename = 0
-"     let selBufRestoreWindowSizes = 1
-"     let selBufDefaultSortOrder = "number" " number, name, path, type, indicators.
-"     let selBufAlwaysShowHelp = 0
-"     let selBufAlwaysShowHidden = 0
-"     let selBufAlwaysShowDetails = 0
-"     let selBufAlwaysShowDirectories = 1
-"     let selBufAlwaysWrapLines = 0
-"     let selBufAlwaysShowPaths = 1
+"     let g:selBufWindowName = '---\ Select\ Buffer\ ---'
+"     let g:selBufOpenInNewWindow = 0
+"     let g:selBufRemoveBrowserBuffer = 0
+"     let g:selBufHighlightOnlyFilename = 0
+"     let g:selBufRestoreWindowSizes = 1
+"     let g:selBufDefaultSortOrder = "number" " number, name, path, type, indicators, mru.
+"     let g:selBufAlwaysShowHelp = 0
+"     let g:selBufAlwaysShowHidden = 0
+"     let g:selBufAlwaysShowDetails = 0
+"     let g:selBufAlwaysShowDirectories = 1
+"     let g:selBufAlwaysWrapLines = 0
+"     let g:selBufAlwaysShowPaths = 1
 "     let g:selBufBrowserMode = "keep" " split, switch, keep
-"     let g:selBufUseVerticalSplit = 1
+"     let g:selBufUseVerticalSplit = 1 " Uses the vertically split windows.
+"     let g:selBufSplitType = "topleft" " See :h vertical for possible options.
+"     let g:selBufDisableMRUlisting = 1 " Disable generating an MRU listing of the file usage.
 "
 " You can also change the default key mappings for all the operations, e.g.,
 "
@@ -73,18 +75,25 @@ if exists("loaded_selectbuf")
 endif
 let loaded_selectbuf=1
 
+" Call this any time to reconfigure the environment. This re-performs the same
+"   initializations that the script does during the vim startup.
+command! -nargs=0 SBInitialize :call <SID>Initialize()
+
 "
 " BEGIN configuration.
 "
 
+function! Initialize()
+
 "
-" The name of the browser. The default is "---Select Buffer---", but you can
+" The name of the browser. The default is "---Select_Buffer---", but you can
 "   change the name at your will.
+"
 if exists("g:selBufWindowName")
   let s:windowName = g:selBufWindowName
   unlet g:selBufWindowName
 else
-  let s:windowName = '---\ Select\ Buffer\ ---'
+  let s:windowName = '---Select_Buffer---'
 endif
 
 "
@@ -243,6 +252,28 @@ else
   let s:useVerticalSplit = 0
 endif
 
+"
+" Specify the split type.
+"
+if exists("g:selBufSplitType")
+  let s:splitType = g:selBufSplitType
+  unlet g:selBufSplitType
+endif
+
+"
+" Disable generating an MRU listing of the file usage. If you never use this
+"   feature, you may as well disable this feature as it reduces the
+"   autocommands and may contribute to improved performance.
+" The deafult is NOT to disable this feature.
+"
+if exists("g:selBufDisableMRUlisting")
+  let s:disableMRU = g:selBufDisableMRUlisting
+  unlet g:selBufDisableMRUlisting
+else
+  let s:disableMRU = 0
+endif
+
+
 
 "
 " END configuration.
@@ -253,22 +284,25 @@ endif
 "
 " To store the buffer from which the browser is invoked.
 let s:originalBuffer = 1
-" Store the header size.
-let s:headerSize = 0
 " characters that must be escaped for a regular expression
 let s:savePositionInSort = 1
+let s:MRUlist = ""
 
 let s:sortByNumber=0
 let s:sortByName=1
 let s:sortByPath=2
 let s:sortByType=3
 let s:sortByIndicators=4
-let s:sortByMaxVal=4
+let s:sortByMRU=5
+let s:sortByMaxVal=5
 
 let s:sortdirlabel  = ""
 " Default Sort type is initialized above from an user setting.
 "let s:sorttype = 0
 let s:sortdirection = 1
+
+" This is the list maintaining the MRU order of buffers.
+let s:MRUlist = ''
 
 function! s:SelBufMyScriptId()
   map <SID>xx <SID>xx
@@ -289,8 +323,17 @@ endif
 "
 " Define a command too (easy for debugging).
 "
-if !exists(":SelBuf")
+if !exists(":SelectBuf")
   command! -nargs=0 SelectBuf :call <SID>SelBufListBufs()
+endif
+
+" commands to manipulate the MRU list.
+if !exists(":SBBufToHead")
+  command! -nargs=1 SBBufToHead :call <SID>SelBufPushToFrontInMRU(<f-args>)
+endif
+
+if !exists(":SBBufToTail")
+  command! -nargs=1 SBBufToTail :call <SID>SelBufPushToBackInMRU(<f-args>)
 endif
 
 " The main plug-in mapping.
@@ -302,7 +345,17 @@ aug SelectBuf
   au!
   exec "au BufWinEnter " . s:windowName . " :call <SID>SelBufUpdateBuffer()"
   exec "au BufWinLeave " . s:windowName . " :call <SID>SelBufDone()"
+  "exec "au WinLeave " . s:windowName . " :call <SID>SelBufRestoreWindows()"
+  if ! s:disableMRU
+    au BufWinEnter * :call <SID>SelBufPushToFrontInMRU(bufnr('%'))
+    au BufWipeout * :call <SID>SelBufDelFromMRU(bufnr(expand("<afile>")))
+  endif
 aug END
+
+endfunction " -- Initialize
+
+" Do the actual initialization.
+call Initialize()
 
 
 "
@@ -334,11 +387,16 @@ function! s:SelBufListBufs()
 
     " Don't split window for "switch" mode.
     if s:SelBufGetModeTypeByName(s:browserMode) != 1
-      if s:useVerticalSplit
-        vert split
-      else
-        split
+      let splitCommand = ""
+      " If user specified a split type, use that.
+      if exists("s:splitType")
+        let splitCommand = splitCommand .  s:splitType
       endif
+      if s:useVerticalSplit
+        let splitCommand = splitCommand . " vert "
+      endif
+      let splitCommand = splitCommand . " split"
+      exec splitCommand
     endif
   endif
 
@@ -363,7 +421,7 @@ function! s:SelBufListBufs()
   if line("'t") != 0
     normal! 't
   endif
-endfunction
+endfunction " SelBufListBufs
 
 
 function! s:SelBufUpdateHeader()
@@ -386,11 +444,15 @@ function! s:SelBufUpdateHeader()
   if line("'z") != 0
     normal! `z
   endif
-endfunction
+endfunction " SelBufUpdateHeader
 
 
 function! s:SelBufAddHeader()
   let helpMsg=""
+  let helpKey = maparg("<Plug>SelBufHelpKey")
+  if helpKey == ""
+    let helpKey = "?"
+  endif
   if s:showHelp
     let helpMsg = helpMsg
       \ . "\" <Enter> or Left-double-click : open current buffer\n"
@@ -398,26 +460,26 @@ function! s:SelBufAddHeader()
       \ . "\" d : delete/undelete current buffer\tD : wipeout current buffer\n"
       \ . "\" i : toggle additional details\t\tp : toggle line wrapping\n"
       \ . "\" c : toggle directory buffers\t\tu : toggle hidden buffers\n"
-      \ . "\" P : toggle show paths\t\t\n"
+      \ . "\" P : toggle show paths\t\t\t\n"
       \ . "\" R : refresh browser\t\t\tq : close browser\n"
       \ . "\" s/S : select sort field for/backward\tr : reverse sort\n"
       \ . "\" Next, Previous & Current buffers are marked 'a', 'b' & 'c' "
         \ . "respectively\n"
-      \ . "\" Press ? to hide help\n"
+      \ . "\" Press " . helpKey . " to hide help\n"
   else
     let helpMsg = helpMsg
-      \ . "\" Press ? to show help\n"
+      \ . "\" Press " . helpKey . " to show help\n"
   endif
   let helpMsg = helpMsg . "\"=" . " Sorting=" . s:sortdirlabel .
               \ s:SelBufGetSortNameByType(s:sorttype) .
               \ ",showDetails=" . s:showDetails .
               \ ",showHidden=" . s:showHidden . ",showDirs=" .
               \ s:showDirectories . ",wrapLines=" . s:wrapLines .
-              \ ",showPaths=" . s:showPaths
+              \ ",showPaths=" . s:showPaths .
               \ "\n"
   0
   put! =helpMsg
-endfunction
+endfunction " SelBufAddHeader
 
 
 function! s:SelBufUpdateBuffer()
@@ -433,7 +495,7 @@ function! s:SelBufUpdateBuffer()
   normal! mt
 
   $
-  let s:headerSize = line("$")
+  let headerSize = line("$")
 
   " Loop over all the buffers.
   let i = 1
@@ -455,61 +517,10 @@ function! s:SelBufUpdateBuffer()
     endif
 
     if showBuffer
-      let newLine = newLine . i . "\t"
-      " If user wants to see more details.
-      if s:showDetails
-        if !buflisted(i)
-          let newLine = newLine . "u"
-        else
-          let newLine = newLine . " "
-        endif
-
-        " Bluff a little bit here about the current and alternate buffers.
-        "  Not accurate though.
-        if s:originalBuffer == i
-          let newLine = newLine . "%"
-        elseif s:originalAltBuffer == i
-          let newLine = newLine . "#"
-        else
-          let newLine = newLine . " "
-        endif
-
-        if bufloaded(i)
-          if bufwinnr(i) != -1
-            " Active buffer.
-            let newLine = newLine . "a"
-          else
-            let newLine = newLine . "h"
-          endif
-        else
-          let newLine = newLine . " "
-        endif
-        
-        " Special case for "my" buffer as I am finally going to be
-        "  non-modifiable, anyway.
-        if getbufvar(i, "&modifiable") == 0 || myBufNr == i
-          let newLine = newLine . "-"
-        elseif getbufvar(i, "&readonly") == 1
-          let newLine = newLine . "="
-        else
-          let newLine = newLine . " "
-        endif
-
-        " Special case for "my" buffer as I am finally going to be
-        "  non-modified, anyway.
-        if getbufvar(i, "&modified") == 1 && myBufNr != i
-          let newLine = newLine . "+"
-        else
-          let newLine = newLine . " "
-        endif
-      endif
-      let newLine = newLine . "\t"
-      if s:showPaths
-        let newLine = newLine . bufname(i)
-      else
-        let newLine = newLine . fnamemodify(bufname(i), ":t")
-      endif
-      call append(line("$"), newLine)
+      "let newLine = s:SelBufGetBufLine(i)
+      "call append(line("$"), newLine)
+      " Hopefully this is easier on sorting.
+      call append(line("$"), i)
     endif
     let i = i + 1
   endwhile
@@ -525,7 +536,7 @@ function! s:SelBufUpdateBuffer()
     endif
     " Avoids error messages.
     silent! exec "-2"
-    if line(".") > s:headerSize
+    if line(".") > headerSize
       +mark b " Mark the previous line.
     endif
   endif
@@ -538,13 +549,90 @@ function! s:SelBufUpdateBuffer()
   let _savePositionInSort = s:savePositionInSort
   let s:savePositionInSort = 0
   call s:SortSelect(0)
+  " Finally add the additional info.
+  call s:SelBufAddInfo()
   let s:savePositionInSort = _savePositionInSort
 
   " For vertical split, we shouldn't adjust the number of lines.
-  if ! s:useVerticalSplit
+  "if ! s:useVerticalSplit
+    " Now that our Save/RestoreWindowSettings() is working correctly, it should
+    "   be fine.
     call s:SelBufAdjustWindowSize()
+  "endif
+endfunction " SelBufUpdateBuffer
+
+
+function! s:SelBufAddInfo()
+  setlocal modifiable
+  0
+  /^"=
+  while search('^\d\+$', "W") != 0
+    let bufNum = s:SelBufGetCurrentBufferNumber()
+    "echomsg "bufNum = " . bufNum . " bufLine = " . s:SelBufGetBufLine(bufNum)
+    call setline(".", s:SelBufGetBufLine(bufNum))
+  endwhile
+  setlocal nomodifiable
+endfunction " SelBufAddInfo
+
+
+function! s:SelBufGetBufLine(bufNum)
+  let newLine = ""
+  let newLine = newLine . a:bufNum . "\t"
+  " If user wants to see more details.
+  if s:showDetails
+    if !buflisted(a:bufNum)
+      let newLine = newLine . "u"
+    else
+      let newLine = newLine . " "
+    endif
+
+    " Bluff a little bit here about the current and alternate buffers.
+    "  Not accurate though.
+    if s:originalBuffer == a:bufNum
+      let newLine = newLine . "%"
+    elseif s:originalAltBuffer == a:bufNum
+      let newLine = newLine . "#"
+    else
+      let newLine = newLine . " "
+    endif
+
+    if bufloaded(a:bufNum)
+      if bufwinnr(a:bufNum) != -1
+        " Active buffer.
+        let newLine = newLine . "a"
+      else
+        let newLine = newLine . "h"
+      endif
+    else
+      let newLine = newLine . " "
+    endif
+    
+    " Special case for "my" buffer as I am finally going to be
+    "  non-modifiable, anyway.
+    if getbufvar(a:bufNum, "&modifiable") == 0 || myBufNr == a:bufNum
+      let newLine = newLine . "-"
+    elseif getbufvar(a:bufNum, "&readonly") == 1
+      let newLine = newLine . "="
+    else
+      let newLine = newLine . " "
+    endif
+
+    " Special case for "my" buffer as I am finally going to be
+    "  non-modified, anyway.
+    if getbufvar(a:bufNum, "&modified") == 1 && myBufNr != a:bufNum
+      let newLine = newLine . "+"
+    else
+      let newLine = newLine . " "
+    endif
+    let newLine = newLine . "\t"
   endif
-endfunction
+  if s:showPaths
+    let newLine = newLine . bufname(a:bufNum)
+  else
+    let newLine = newLine . fnamemodify(bufname(a:bufNum), ":t")
+  endif
+  return newLine
+endfunction " SelBufGetBufLine
 
 
 function! s:SelBufAdjustWindowSize()
@@ -558,24 +646,37 @@ endfunction
 
 
 function! s:SelBufSelectCurrentBuffer(openInNewWindow)
-  let selectedBufferNumber = s:SelBufGetBufferNumber()
+  if search("^\"=", "W") != 0
+    +
+    return
+  endif
+
+  let selectedBufferNumber = s:SelBufGetCurrentBufferNumber()
   if selectedBufferNumber == -1
     +
     return
   endif
 
   " Quit window only for "split" mode.
+  let didQuit = 0
   if s:SelBufGetModeTypeByName(s:browserMode) == 0
     if ! (a:openInNewWindow || s:openInNewWindow)
       " In any case, if there is only one window, then don't quit.
       if (NumberOfWindows() > 1)
-        quit
+        silent! quit
+        let didQuit = 1
       endif
     endif
     let v:errmsg = ""
   elseif s:SelBufGetModeTypeByName(s:browserMode) == 2
     " Switch to the most recently used window.
     wincmd p
+  endif
+  " If we are not quitting the window, then there is no point trying to restore
+  "   the window settings.
+  if ! didQuit
+    call RemoveNotifyWindowClose(s:windowName)
+    call ResetWindowSettings()
   endif
 
   silent! exec "buffer" selectedBufferNumber
@@ -589,7 +690,7 @@ function! s:SelBufSelectCurrentBuffer(openInNewWindow)
        \ echo "Error Message: " . v:errmsg |
        \ echohl None
   endif
-endfunction
+endfunction " SelBufSelectCurrentBuffer
 
 
 function! s:SelBufDeleteCurrentBuffer(wipeout) range
@@ -612,7 +713,7 @@ function! s:SelBufDeleteCurrentBuffer(wipeout) range
   while line <= a:lastline
     silent execute line
 
-    let selectedBufferNumber = s:SelBufGetBufferNumber()
+    let selectedBufferNumber = s:SelBufGetCurrentBufferNumber()
     if selectedBufferNumber == -1
       +
       return
@@ -685,7 +786,7 @@ function! s:SelBufDeleteCurrentBuffer(wipeout) range
 
   redraw | echo msg
   "call input(msg)
-endfunction
+endfunction " SelBufDeleteCurrentBuffer
 
 
 function! s:SelBufQuit()
@@ -696,10 +797,6 @@ function! s:SelBufQuit()
 
   if NumberOfWindows() > 1
     silent! quit
-
-    if s:restoreWindowSizes && s:SelBufGetModeTypeByName(s:browserMode) != 2
-      call RestoreWindowSettings()
-    endif
   else
     redraw | echo "Can't quit the last window"
   endif
@@ -728,7 +825,7 @@ function! s:SelBufSetupBuf()
   syn match SelBufHelpLine "^\" .*$" contains=SelBufMapping
 
   " The starting line. Summary of current settings.
-  syn keyword SelBufKeyWords Sorting showDetails showHidden showDirs wrapLines showPaths contained
+  syn keyword SelBufKeyWords Sorting showDetails showHidden showDirs wrapLines showPaths bufNameOnly contained
   syn region SelBufKeyValues start=+=+ end=+,+ end=+$+ skip=+ + contained
   syn match SelBufKeyValuePair +\i\+=\i\++ contained contains=SelBufKeyWords,SelBufKeyValues
   syn match SelBufSummary "^\"= .*$" contains=SelBufKeyValuePair
@@ -739,8 +836,8 @@ function! s:SelBufSetupBuf()
   else
     syn match SelBufBufName "\([a-zA-Z]:\)\=\([/\\]\{-}\p\{-1,}\)$" contained
   endif
-  syn region SelBufBufIndicators start=+\t+ end=+\t+ contained
-  syn match SelBufBufLine "^\d\+\t.*$" contains=SelBufBufNumber,SelBufBufIndicators,SelBufBufName
+  syn match SelBufBufIndicators "\(\t\| \)[^\t]*\t" contained
+  syn match SelBufBufLine "^[^"].*$" contains=SelBufBufNumber,SelBufBufIndicators,SelBufBufName
 
 
   hi def link SelBufHelpLine      Comment
@@ -791,7 +888,11 @@ function! s:SelBufSetupBuf()
   command! -nargs=0 -buffer SS :call <SID>SortSelect(1)
   command! -nargs=0 -buffer SSR :call <SID>SortSelect(-1)
   command! -nargs=0 -buffer SR :call <SID>SortReverse()
-endfunction
+  command! -nargs=0 -buffer SQ :call <SID>SelBufQuit()
+
+  " Arrange a notification of the window close on this window.
+  call AddNotifyWindowClose(s:windowName, s:myScriptId . "SelBufRestoreWindows")
+endfunction " SelBufSetupBuf
 
 
 function! s:SelBufDefineMapFromKey(mapType, mapKeyName, defaultKey, cmdStr)
@@ -867,10 +968,14 @@ function! s:SelBufDone()
     let myBufNr = FindBufferForName(s:windowName)
     silent! exec "bwipeout " . myBufNr
   endif
+endfunction
 
+
+function! s:SelBufRestoreWindows(dummyTitle)
   " If user wants us to restore window sizes during the exit.
-  if s:restoreWindowSizes
-    "call RestoreWindowSettings()
+  if s:restoreWindowSizes && s:SelBufGetModeTypeByName(s:browserMode) != 2
+  "redraw | echomsg "nWindows: " . NumberOfWindows()
+  call RestoreWindowSettings()
   endif
 endfunction
 
@@ -888,10 +993,13 @@ function! s:SelBufHACKSearchString()
 endfunction
 
 
-function! s:SelBufGetBufferNumber()
-  normal! 0yw
-  let bufNumber = substitute(@", '\s\+', '', 'g')
-  if line(".") <= s:headerSize || match(bufNumber, '\d\+') == -1
+function! s:SelBufGetCurrentBufferNumber()
+  return s:SelBufGetBufferNumber(getline("."))
+endfunction
+
+function! s:SelBufGetBufferNumber(line)
+  let bufNumber = matchstr(a:line, '^\d\+')
+  if bufNumber == ""
     return -1
   endif
   " Convert it to number type.
@@ -932,6 +1040,29 @@ function! s:SelBufGetModeTypeByName(modeName)
 endfunction
 
 
+function! s:SelBufPushToFrontInMRU(bufNum)
+  " Avoid browser buffer to come in the front.
+  if a:bufNum == FindBufferForName(s:windowName)
+      return
+  end
+
+  let s:MRUlist = MvPushToFront(s:MRUlist, ',', a:bufNum)
+  let g:MRUlist = s:MRUlist " For debugging.
+endfunction
+
+
+function! s:SelBufPushToBackInMRU(bufNum)
+  let s:MRUlist = MvPullToBack(s:MRUlist, ',', a:bufNum)
+  let g:MRUlist = s:MRUlist " For debugging.
+endfunction
+
+
+function! s:SelBufDelFromMRU(bufNum)
+  let s:MRUlist = MvRemoveElement(s:MRUlist, ',', a:bufNum)
+  let g:MRUlist = s:MRUlist " For debugging.
+endfunction
+
+
 """
 """ Support for sorting...from explorer.vim (2.5)
 """ Minimize the changes necessary, to make future merges easier.
@@ -951,6 +1082,8 @@ function! s:SelBufGetSortNameByType(sorttype)
     return "type"
   elseif a:sorttype == 4
     return "indicators"
+  elseif a:sorttype == 5
+    return "mru"
   elseif match(a:sorttype, '\a') != -1
     return a:sorttype
   else
@@ -971,6 +1104,8 @@ function! s:SelBufGetSortTypeByName(sortname)
     return 3
   elseif a:sortname == "indicators"
     return 4
+  elseif a:sortname == "mru"
+    return 5
   else
     return -1
   endif
@@ -987,6 +1122,8 @@ function! s:SelBufGetSortCmpFnByType(sorttype)
     return "s:SelBufCmpByType"
   elseif a:sorttype == 4
     return "s:SelBufCmpByIndicators"
+  elseif a:sorttype == 5
+    return "s:SelBufCmpByMRU"
   else
     return ""
   endif
@@ -1000,6 +1137,7 @@ endfunction
 function! s:SelBufCmpByName(line1, line2, direction)
   let name1 = substitute(a:line1, '^.*\t.\{-}\([^/\\]*$\)', '\1', '')
   let name2 = substitute(a:line2, '^.*\t.\{-}\([^/\\]*$\)', '\1', '')
+
   if name1 < name2
     return -a:direction
   elseif name1 > name2
@@ -1012,6 +1150,7 @@ endfunction
 function! s:SelBufCmpByPath(line1, line2, direction)
   let name1 = substitute(a:line1, '^.*\t', '', '')
   let name2 = substitute(a:line2, '^.*\t', '', '')
+
   if name1 < name2
     return -a:direction
   elseif name1 > name2
@@ -1022,8 +1161,9 @@ function! s:SelBufCmpByPath(line1, line2, direction)
 endfunction
 
 function! s:SelBufCmpByNumber(line1, line2, direction)
-  let num1 = substitute(a:line1, '\t.*$', '', '') + 0
-  let num2 = substitute(a:line2, '\t.*$', '', '') + 0
+  let num1 = s:SelBufGetBufferNumber(a:line1)
+  let num2 = s:SelBufGetBufferNumber(a:line2)
+
   if num1 < num2
     return -a:direction
   elseif num1 > num2
@@ -1072,6 +1212,7 @@ endfunction
 function! s:SelBufCmpByIndicators(line1, line2, direction)
   let ind1 = substitute(a:line1, '^\d\+\t\+\([^\t]\+\)\t\+.*$', '\1', '')
   let ind2 = substitute(a:line2, '^\d\+\t\+\([^\t]\+\)\t\+.*$', '\1', '')
+
   if ind1 < ind2
     return -a:direction
   elseif ind1 > ind2
@@ -1081,6 +1222,13 @@ function! s:SelBufCmpByIndicators(line1, line2, direction)
   endif
 endfunction
 
+
+function! s:SelBufCmpByMRU(line1, line2, direction)
+  let num1 = s:SelBufGetBufferNumber(a:line1)
+  let num2 = s:SelBufGetBufferNumber(a:line2)
+
+  return MvCmpByPosition(s:MRUlist, ',', num1, num2, a:direction)
+endfunction
 
 "
 " Interface to sort.
@@ -1162,7 +1310,6 @@ function! s:SortListing(msg)
     " This is not needed because of the buftype setting.
     "setlocal nomodified
     setlocal nomodifiable
-
 endfunction
 
 ""
