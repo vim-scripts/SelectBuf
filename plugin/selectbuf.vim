@@ -1,12 +1,12 @@
 " selectbuf.vim
 " Author: Hari Krishna (hari_vim at yahoo dot com)
-" Last Change: 19-Oct-2004 @ 19:16
+" Last Change: 14-Mar-2005 @ 16:57
 " Created: Before 20-Jul-1999
 "          (Ref: http://groups.yahoo.com/group/vim/message/6409
 "                mailto:vim-thread.1235@vim.org)
 " Requires: Vim-6.3, multvals.vim(3.5), genutils.vim(1.16)
 " Depends On: multiselect.vim(1.0)
-" Version: 3.4.0
+" Version: 3.5.0
 " Licence: This program is free software; you can redistribute it and/or
 "          modify it under the terms of the GNU General Public License.
 "          See http://www.gnu.org/copyleft/gpl.txt 
@@ -62,7 +62,7 @@ if !exists('loaded_genutils') || loaded_genutils < 116
   echomsg 'SelectBuf: You need a newer version of genutils.vim plugin'
   finish
 endif
-let loaded_selectbuf=303
+let loaded_selectbuf=305
 
 " Make sure line-continuations won't cause any problem. This will be restored
 "   at the end
@@ -327,12 +327,11 @@ function! s:ListBufs()
     call s:ResumeAutoUpdates()
   endtry
 
-  if s:opMode ==# 'user' && s:browserMode !=# 'keep'
-    if s:savedSearchString != ''
-      let @/ = s:savedSearchString
-    endif
-    let s:savedSearchString = histget('search')
-    call histadd("search", @/) " Ignores the call if it is empty.
+  " When browser window is opened for the first time, if it was invoked by the
+  " user (instead of accidentally switching to the browser buffer), and the
+  " browser mode is not to keep the window open.
+  if s:opMode ==# 'user' && s:browserMode !=# 'keep' && browserWinNo == -1
+    call s:RestoreSearchString()
 
     " Arrange a notification of the window close on this window.
     call AddNotifyWindowClose(s:windowName, s:myScriptId . "RestoreWindows")
@@ -488,6 +487,7 @@ function! s:FullUpdate() " {{{
   let showBuffer = 0
   let s:bufList = ""
   let lastBufNr = bufnr('$')
+  call s:InitializeMRU()
   if s:optMRUfullUpdate && s:GetSortNameByType(s:sorttype) ==# 'mru'
     let i = s:NextBufInMRU()
   else
@@ -834,7 +834,7 @@ function! s:RemoveColumn(colPos, colWidth, collect)
   try
     setlocal modifiable
     set nostartofline
-    exec "normal ".a:colPos."|" | " Position correctly.
+    exec "normal! ".a:colPos."|" | " Position correctly.
     silent! keepjumps exec "normal! \<C-V>G".
           \ ((a:colWidth > 0) ? (a:colWidth-1).'l' : '$').
           \ '"'.(a:collect?'z':'_').'d'
@@ -855,15 +855,13 @@ function! s:AddColumn(colPos, block)
     return
   endif
   let _z = @z
-  let _undolevels = &undolevels
   let _modifiable = &l:modifiable
   try
-    set undolevels=1 " Make sure there is at least one level.
     setlocal modifiable
     call setreg('z', a:block, "\<C-V>")
     call search('^"= ', "w")
     +
-    exec "normal ".a:colPos."|" | " Position correctly.
+    exec "normal!" (a:colPos ? a:colPos : 1)."|" | " Position correctly.
     if a:colPos == 0
       normal! "zP
     else
@@ -872,7 +870,6 @@ function! s:AddColumn(colPos, block)
   finally
     let &l:modifiable = _modifiable
     let @z = _z
-    let &undolevels = _undolevels
   endtry
 endfunction " AddColumn
 " Add/Remove buffer/indicators numbers }}}
@@ -1045,7 +1042,7 @@ function! s:DeleteSelBuffers(wipeout) range
   " Temporarily delay dynamic update until we call UpdateBuffers()
   let s:delayedDynUpdate = 1
   try
-    if s:MultiSelectExists()
+    if s:MultiSelectionExists()
       exec 'MSExecCmd call '.s:myScriptId.'DeleteBuffers("'.a:wipeout.'")'
       MSClear
     else
@@ -1125,40 +1122,40 @@ endfunction
 " Buffer Deletions }}}
 
 function! s:ExecFileCmdOnSelection(cmd) range " {{{
+  let ind = match(a:cmd, '%\@<!\%(%%\)*\zs%[sn]')
+  if ind != -1
+    let cmdPre = strpart(a:cmd, 0, ind)
+    let cmdPost = strpart(a:cmd, ind+2)
+  else
+    let cmdPre = a:cmd.' '
+    let cmdPost = ''
+  endif
+  let cmdPre = substitute(cmdPre, '%%', '%', 'g')
+  let cmdPost = substitute(cmdPost, '%%', '%', 'g')
+
   if s:hideBufNums
     call s:AddBufNumbers()
   endif
-  call SaveHardPosition('ExecFileCmdOnSelection')
-
   try
-    let ind = match(a:cmd, '%\@<!\%(%%\)*\zs%[sn]')
-    if ind != -1
-      let cmdPre = substitute(strpart(a:cmd, 0, ind), '%%', '%', 'g')
-      let cmdPost = substitute(strpart(a:cmd, ind+2), '%%', '%', 'g')
-    else
-      let cmdPre = substitute(a:cmd, '%%', '%', 'g').' '
-      let cmdPost = ''
-    endif
     if ind != -1 && a:cmd[ind+1] == 'n'
       let bufList = SBSelectedBufNums(a:firstline, a:lastline)
     else
       let bufList = SBSelectedBuffers(a:firstline, a:lastline)
     endif
-    if bufList != ''
-      let cmd = escape(cmdPre.bufList.cmdPost, '%')
-      redraw | echo cmd
-      exec cmd
-      MSClear
-    endif
   finally
-    call s:ResumeAutoUpdates()
     if s:hideBufNums
       call s:RemoveBufNumbers()
     endif
-
-    call RestoreHardPosition('ExecFileCmdOnSelection')
-    call ResetHardPosition('ExecFileCmdOnSelection')
   endtry
+
+  if bufList != ''
+    let cmd = escape(cmdPre.bufList.cmdPost, '%')
+    redraw | echo cmd
+    exec cmd
+    if s:MultiSelectionExists()
+      MSClear
+    endif
+  endif
 endfunction " }}}
 
 " Buffer line operations }}}
@@ -1222,7 +1219,7 @@ function! s:SetupBuf() " {{{
 
     cnoremap <buffer> <C-R><C-F> <C-R>=expand('#'.SBCurBufNumber().':p')<CR>
 
-    noremap <buffer> 0 gg:silent! call search('^"= ')<CR>
+    nnoremap <buffer> 0 gg0:silent! call search('^"= ')<CR>
 
     " From Thomas Link (t dot link02a at gmx at net)
     " When user types numbers in the browser window start a search for the
@@ -1231,11 +1228,12 @@ function! s:SetupBuf() " {{{
     let i = 0
     let max = strlen(chars)
     while i < max
-      exec "noremap <buffer> ". chars[i] ." /^". chars[i]
+      exec 'noremap <buffer>' chars[i] ':call <SID>InputBufNumber()<CR>'.
+            \ chars[i]
       let i = i + 1
     endwhile
 
-    if exists('g:loaded_multiselect') && g:loaded_multiselect >= 100
+    if s:MSExists()
       nnoremap <buffer> <silent> <Space> :.MSInvert<CR>
       vnoremap <buffer> <silent> <Space> :MSInvert<CR>
     endif
@@ -1291,6 +1289,7 @@ function! s:SetupBuf() " {{{
 endfunction " SetupBuf }}}
 
 function! s:SetupSyntax() " {{{
+  syn clear " Why do we have to do this explicitly?
   set ft=selectbuf
 
   " The mappings in the help header.
@@ -1431,7 +1430,8 @@ function! s:RestoreSearchString() " {{{
   if s:savedSearchString != ''
     let @/ = s:savedSearchString " This doesn't modify the history.
     let s:savedSearchString = histget("search")
-    " Fortunately, this will make sure there is only one copy in the history.
+    " Fortunately, this will make sure there is only one copy in the history,
+    " and ignores the call if it is empty.
     call histadd("search", @/)
   endif
 endfunction " }}}
@@ -1555,7 +1555,7 @@ function! s:LaunchBuffer(...) " {{{
     let i = 1
     while i <= a:0
       let arg = a:{i}
-      if filereadable(a:{i})
+      if filereadable(a:{i}) || a:{i} == '.'
         let arg = fnamemodify(arg, ':p')
       endif
       if OnMS() && &shellslash && filereadable(arg)
@@ -1937,12 +1937,92 @@ function! s:CalcMaxBufNameLen(skipBuf, skipHidden) " {{{
   return maxBufNameLen
 endfunction " }}}
 
-function! s:MultiSelectExists() " {{{
-  if exists('g:loaded_multiselect') && g:loaded_multiselect >= 100 && MSSelectionExists()
+function! s:MultiSelectionExists() " {{{
+  if s:MSExists() && MSSelectionExists()
     return 1
   else
     return 0
   endif
+endfunction " }}}
+
+function! s:MSExists() " {{{
+  if exists('g:loaded_multiselect') && g:loaded_multiselect >= 100
+    return 1
+  else
+    return 0
+  endif
+endfunction " }}}
+
+function! s:InitializeMRU() " {{{
+  " Initialize with the bufers that might have been already loaded. This is
+  "   required to show the buffers that are loaded by specifying them as
+  "   command-line arguments (Reported by David Fishburn).
+  if s:MRUlist == ''
+    let createMode = 1
+  else
+    let createMode = 0 " Update mode.
+  endif
+  if ! s:disableMRUlisting
+    let i = 1
+    let lastBufNr = bufnr('$')
+    while i <= lastBufNr
+      if bufexists(i)
+        if createMode
+          let s:MRUlist = s:MRUlist . i . ','
+        else
+          if !MvContainsElement(s:MRUlist, ',', i)
+            let s:MRUlist = s:MRUlist . i . ','
+          endif
+        endif
+      endif
+      let i = i + 1
+    endwhile
+  endif
+endfunction " }}}
+
+function! s:InputBufNumber() " {{{
+  " Generate a line with spaces to clear the previous message.
+  let i = 1
+  let clearLine = "\r"
+  while i < &columns
+    let clearLine = clearLine . ' '
+    let i = i + 1
+  endwhile
+
+  let bufNr = ''
+  let abort = 0
+  call s:Prompt(bufNr)
+  let breakLoop = 0
+  while !breakLoop
+    try
+      let char = getchar()
+    catch /^Vim:Interrupt$/
+      let char = "\<Esc>"
+    endtry
+    "exec BPBreakIf(cnt == 1, 2)
+    if char == '^\d\+$' || type(char) == 0
+      let char = nr2char(char)
+    endif " It is the ascii code.
+    if char == "\<BS>"
+      let bufNr = strpart(bufNr, 0, strlen(bufNr) - 1)
+    elseif char == "\<Esc>"
+      let breakLoop = 1
+      let abort = 1
+    elseif char == "\<CR>"
+      let breakLoop = 1
+    else
+      let bufNr = bufNr . char
+    endif
+    echon clearLine
+    call s:Prompt(bufNr)
+  endwhile
+  if !abort && bufNr != ''
+    call search('^'.bufNr.'\>', 'w')
+  endif
+endfunction
+
+function! s:Prompt(bufNr)
+  echon "\rEnter Buffer Number: " . a:bufNr
 endfunction " }}}
 " Utility methods. }}}
 
@@ -2248,7 +2328,7 @@ function! SBSelectedBufNums(fline, lline) " range
   "   reliable way to detect if the command was executed on the visual range
   "   (as it could be the default range too), but the third condition here
   "   should be sufficient for most of the cases.
-  if s:MultiSelectExists() &&
+  if s:MultiSelectionExists() &&
         \!((a:fline != a:lline) ||
         \  (a:fline == a:lline && line("'<") == line("'>") &&
         \   a:fline == line("'<")))
@@ -2278,6 +2358,29 @@ function! SBSelectedBufNums(fline, lline) " range
   endif
   return bufNums
 endfunction
+
+""" BEGIN: Experimental API {{{
+
+function! SBGet(var)
+  return {a:var}
+endfunction
+
+function! SBSet(var, val)
+  let {a:var} = a:val
+endfunction
+
+function! SBCall(func, ...)
+  exec MakeArgumentString()
+  exec "let result = {a:func}(".argumentString.")"
+  return result
+endfunction
+
+function! SBEval(expr)
+  exec "let result = ".a:expr
+  return result
+endfunction
+
+""" END: Experimental API }}}
 " Public API }}}
  
 
@@ -2318,19 +2421,7 @@ endfunction
 " Do the actual initialization.
 call s:Initialize()
 
-" Initialize with the bufers that might have been already loaded. This is
-"   required to show the buffers that are loaded by specifying them as
-"   command-line arguments (Reported by David Fishburn).
-if ! s:disableMRUlisting && s:MRUlist == ''
-  let i = 1
-  let lastBufNr = bufnr('$')
-  while i <= lastBufNr
-    if bufexists(i)
-      let s:MRUlist = s:MRUlist . i . ','
-    endif
-    let i = i + 1
-  endwhile
-endif
+call s:InitializeMRU()
 
 " Restore cpo.
 let &cpo = s:save_cpo
