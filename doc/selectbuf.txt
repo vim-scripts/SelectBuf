@@ -1,0 +1,469 @@
+*selectbuf.txt* A fast and feature rich buffer explorer.
+                    Requires Vim 6.0
+            Last Change: 10-Mar-2003 @ 09:29
+          Since Version: 3.0
+               Revision: 1.0.4
+         Plugin Version: 3.0
+                 Author: Hari Krishna Dara (hari_vim at yahoo dot com)
+
+                                            *selectbuf-introduction*
+                                            *selectbuf-plugin*
+SelectBuf is a buffer explorer similar to the file explorer (|file-explorer|)
+plugin that comes with Vim, the difference being that file explorer allows you
+to view the files on the file system, where as buffer explorer limits the view
+to only the files that are already opened in the current Vim session.
+
+==============================================================================
+OVERVIEW                                    *selectbuf-overview*
+
+|selectbuf-installation|    Installing the plugin.
+
+|selectbuf-usage|           A brief usage to get you quickly started.
+
+|selectbuf-features|        A description of features.
+
+|selectbuf-mappings|        Mappings created in the browser window.
+
+|selectbuf-commands|        A description of commands that can be issued
+                            on Vim command-line.
+
+|selectbuf-settings|        An explanation of how to configure the plugin.
+
+|selectbuf-changes-3.0|     A change list for version 3.0 from previous version.
+
+|selectbuf-known-issues|    A list of known issues.
+
+|selectbuf-wishlist|        Wishlist items that may be worth doing for a future
+                            version.
+==============================================================================
+
+                                            *selectbuf-installation*
+To install, place the plugin in one of the runtime plugin directories along
+with the genutils.vim and multvals.vim scripts that it depends on. This
+typically is .vim/plugin or vimfiles/plugin directory under your home
+directory. To get the latest versions of these plugins, goto the following
+webpages:
+     selectbuf.vim: http://www.vim.org/script.php?script_id=107
+     genutils.vim:  http://vim.sourceforge.net/script.php?script_id=197
+     multvals.vim:  http://vim.sourceforge.net/script.php?script_id=171
+
+The distribution contains 2 files:
+    - The selectbuf plugin itself (selectbuf.vim).
+        - Should go into the user plugin directory.
+    - The help file (this file) (selectbuf.txt).
+        - Should go into the user doc directory.
+
+If you obtained the plugin as a zip archive,
+    - Just extract it in your runtime directory.
+    - Start a new instance or go to an existing instance of vim.
+    - Execute:
+>
+        :helpt <your runtime directory>/doc
+<
+      This should generate the help tags for the selectbuf plugin help.
+
+Later, if you need to temprarily disable the plugin without needing to remove
+the file or move it into a different directory, you can set the loaded_selectbuf
+variable in your vimrc. You can also set the no_selectbuf_maps to disable just
+the mappings defined in this plugin or no_plugin_maps to disable mappings in all
+the plugins (provided they honor this setting), in your vimrc.
+
+                                            *selectbuf-activation-key*
+                                            *selectbuf-plug-mapping*
+Next, if you would like to change the activation key from the default <F3> to
+something else, you need to customize it in your vimrc. Choose a function key or
+a key sequence (say \sb) and add the following line to your vimrc: >
+
+       nmap <silent> <unique> \sb <Plug>SelectBuf
+<
+After you restart Vim, you will be able to open the browser window by pressing
+\sb in the normal mode.
+==============================================================================
+
+                                            *selectbuf-usage*
+To use the plugin, first active the window by pressing the activation key
+(the default <F3>, or whatever you chose during the |selectbuf-installation|
+step). This opens a window titled "[Select Buf]" and displays a list of all the
+regular buffers that are loaded in the current Vim session.
+
+There are probably other buffers loaded that are used by plugins (such as the
+one used by selectbuf itself) and others such as the ones loaded by help.
+SelectBuf by default hides these buffers, because it is rare that you want to
+edit such buffers (see |selectbuf-settings| and |selectbuf-mappings| for ways to
+change this behavior)
+
+To open a buffer, you can double-click left-mouse button on the line
+corresponding to the buffer or move your cursor and press <Enter> key. You can
+press the same key that you used to activate the browser to even close it
+without selecting any buffer. To see other useful commands for opening buffers,
+see |selectbuf-mappings|.
+
+Everytime the browser window is opened, the plugin creates three marks, viz.,
+a, b and c (|mark|). These marks (accessed as 'a, 'b and 'c) always points to
+the next, previous and the current buffers in the order of their buffer
+numbers, irrespective of how the buffers are sorted.
+==============================================================================
+
+                                            *selectbuf-features*
+Here is a brief list of important features:
+    - Incremental update of the browser for speed. The browser caches the list
+      of buffers and incrementally updates them as and when the new buffers
+      are added and the old ones are deleted, instead of regenerating the list
+      every time the browser needs an updated. This is a lot more efficient
+      especially when you work with a large set of files at a time in the same
+      vim session and it happens quite often, when you use quickfix through
+      make, grep, id-utils etc. This makes the browser a lot more responsive
+      both when used stand-alone and when used in WinManager. When you want to
+      open the browser window, it is almost instantaneous, no matter you have
+      just 10 files open or 1000 files.
+    - Hide buffer numbers. This is useful when used under WinManager or in
+      combination with the vertically-split "Always On" mode as mentioned
+      below. This reduces the horizontal real-estate required for the plugin
+      when all you really care about is the buffer name.
+    - Block operations for buffer deletes. You can block select the list of
+      buffers and delete/undelete/wipeout at once. Some of the plugins often
+      produce huge number of temporary buffers with similar looking names (or
+      unnamed buffers), which can be selected as a block if sorted
+      by name. If you want to delete all the buffers of a particular type,
+      simply sort by type so that they are all adjacent and do a block delete.
+    - Flexible configuration. Most of the significant features can be turned
+      on and off and can be given a default value. The key associations for
+      all the commands can be customized. The syntax coloring can be changed.
+      The features can also be changed interactively.
+    - "Always On" mode. You can configure the browser to be always on and switch
+      between different available modes interactively. The always on mode is
+      very useful if you like to use mouse and would like to have a quick
+      access to the list of buffers displayed in a vertically split left
+      window. If you choose to use the plugin under WinManager, you don't have
+      to do any additional configuration.
+    - Marks for a quick access to the next, previous and current buffers in the
+      order of their buffer numbers.
+    - The browser when opened remembers the existing window sizes and
+      automatically restores them after the browser window is hidden. This is
+      important if you work with multiple windows.
+    - Other standard features found in a few of the other buffer explorers such
+      as sorting, MRU access to buffers, syntax coloring, help header and
+      more. There are more ways that you can sort and the sorting is also
+      faster too.
+==============================================================================
+
+                                            *selectbuf-mappings*
+The plugin defines a set of mappings to be used in the browser window. A brief
+description of these commands can be seen right in the window by pressing the
+default help toggle key, ?. Each one of the mappings has a corresponding <Plug>
+mapping that can be used to change the key association from your vimrc file. As
+an example the below mapping when placed in your vimrc changes the key that
+activates the help header to <C-H> instead of the default ?. This leaves ? for
+doing reverse searches. >
+
+        nmap <script> <silent> <Plug>SelBufTHelpKey <C-H>
+<
+Note that the semantic is reversed from the usual plugin convention (as
+described in the "MAPPING" section under |write-plugin|), as the <Plug> mapping
+is lhs instead of rhs. This is so that the key can later be obtained for display
+purposes, which can be done only if the key is the rhs (there is no vim function
+to obtain the lhs of a mapping).
+
+                                *SelBufDeleteKey*        *SelBufMSelectKey*
+                                *SelBufOpenKey*          *SelBufQuitKey*
+                                *SelBufRefreshKey*       *SelBufSelectKey*
+                                *SelBufShowSummaryKey*   *SelBufSortRevKey*
+                                *SelBufSortSelectBKey*   *SelBufSortSelectFKey*
+                                *SelBufTBufNumsKey*      *SelBufTDetailsKey*
+                                *SelBufTHelpKey*         *SelBufTHiddenKey*
+                                *SelBufTHidePathsKey*    *SelBufWipeOutKey*
+                                *SelBufWSelectKey*
+
+
+Here is a table of all the mappings and their default key associations:
+
+    Mapping               Default       Description~
+    SelBufDeleteKey       d             Delete/Undelete current buffer
+                                        (list/unlist). See |:delete|
+    SelBufMSelectKey      <2-LeftMouse> Same as SelBufSelectKey, but using
+                                        mouse. The default is to double click
+                                        the item but you can change it to say
+                                        <RightMouse> if it is more convenient.
+                                        In fact there is nothing to prevent you
+                                        from assigning a key to this instead of
+                                        a mouse click.
+    SelBufOpenKey         O             Same as SelBufSelectKey, but keep
+                                        browser open.
+    SelBufQuitKey         q             Quit browser. Under WinManager, this
+                                        just moves the cursor back to the
+                                        previous window.
+    SelBufRefreshKey      R             Refresh browser.
+    SelBufSelectKey       <CR>          Open buffer in the previous window.
+    SelBufShowSummaryKey  <C-G>         Shows summary of the current buffer.
+    SelBufWSelectKey      <C-W><CR>     Split open the current buffer.
+    SelBufSortRevKey      r             Reverse the sort direction.
+    SelBufSortSelectBKey  S             Select previous sort field.
+    SelBufSortSelectFKey  s             Select next sort field.
+    SelBufTBufNumsKey     p             Toggle showing buffer numbers.
+    SelBufTDetailsKey     i             Toggle showing details.
+    SelBufTHelpKey        ?             Toggle showing help header.
+    SelBufTHiddenKey      u             Toggle showing unlisted buffers.
+    SelBufTHidePathsKey   P             Toggle showing full path.
+    SelBufWipeOutKey      D             |:wipeout| current buffer.
+
+Note that SelBufDeleteKey only sets/clears the 'buflisted' option, to completely
+remove a buffer from the current Vim session, use SelBufWipeOutKey.  Deleting a
+buffer instead of wiping it out is useful to hide the buffer temporarily. To
+undelete the buffer, first show the unlisted buffers using the SelBufTHiddenKey
+and press SelBufDeleteKey again on the buffer. For more information see
+|:delete| and |:wipeout|.
+==============================================================================
+
+                                            *selectbuf-commands*
+The plugin defines some commands that can be invoked on the vim |command-line|.
+
+                                            *SelectBuf*
+SelectBuf       This command can be used instead of the
+                |selectbuf-activation-key|, and it works exactly like its
+                corresponding mapping. If the browser is already opened, it just
+                moves the cursor to the browser window (and updates it),
+                otherwise it opens a new window for the browser and takes the
+                cursor to the new window.
+
+                                            *SBSettings*
+SBSettings      This command is an interactive way of temporarily modifying
+                script settings without needing to remember the names of the
+                global variables and to remember to run |SBInitialize| every
+                time.  The command shows the list of settings in a tabular form
+                to choose one from. Enter the index of the setting that you
+                would like to modify or just press <Enter> to quit the dialog.
+                Selecting a setting will first show you the current value of
+                that setting and then give you a prompt to enter new value for
+                it. Again, if you don't want to change the value just hit
+                <Enter>.
+
+                Note that the settings are modified only in the current Vim
+                session. If you want the change to take place across sessions,
+                lookup the global variable name corresponding to the setting and
+                add an entry in your vimrc as described in |selectbuf-settings|.
+
+                                            *SBInitialize*
+SBInitialize    This command reinitializes the plugin and imports any changes
+                done to the plugin settings in the global name space. If any
+                plugin specific global variables are modified in the current
+                Vim session, they are not imported until you run this command
+                or any other command that results in a re-initialization of
+                the plugin (like |SBSettings|).
+
+                                            *SBBufToHead*
+                                            *SBBufToTail*
+These commands can be used to move a buffer to the head or to the tail in the
+MRU order without needing to open/close the buffers. E.g., to push the current
+file to the end of the MRU list (so that it will appear at the end of the list
+the next time browser is updated, if the current sort order is MRU): >
+
+        :SBBufToTail %
+<
+To move buffer 10 to the head of the MRU list (so that it will appear at the
+start of the list the next time browser is updated, if the current sort order is
+MRU): >
+
+        :SBBufToHead 10
+<
+==============================================================================
+
+                                            *selectbuf-settings*
+The plugin provides support for customization through a set of global
+variables, in addition to the customization of the activation key as described
+in |selectbuf-activation-key| and mappings as described in |selectbuf-mappings|.
+When assigned a value in the vimrc, these global variables are read in by the
+plugin during the startup and are used to customize it. As an example, the below
+commands when placed in vimrc make the browser stay always visible in a
+vertically split left window. >
+
+        :let g:selBufBrowserMode = "keep"
+        :let g:selBufUseVerticalSplit = 1
+        :let g:selBufSplitType = "topleft"
+<
+
+                        *selBufAlwaysHideBufNums*     *selBufAlwaysShowDetails*
+                        *selBufAlwaysShowHelp*        *selBufAlwaysShowHidden*
+                        *selBufAlwaysShowPaths*       *selBufBrowserMode*
+                        *selBufDefaultSortDirection*  *selBufDefaultSortOrder*
+                        *selBufDelayedDynUpdate*      *selBufDisableMRUlisting*
+                        *selBufDisableSummary*        *selBufEnableDynUpdate*
+                        *selBufHighlightOnlyFilename* *selBufIgnoreNonFileBufs*
+                        *selBufRestoreWindowSizes*    *selBufSplitType*
+                        *selBufUseVerticalSplit*
+
+Here is a table that describes the names of the global variables with their
+defaults.
+
+    Setting                     Default Description ~
+    selBufAlwaysHideBufNums     0       The plugin by default shows the buffer
+                                        numbers, but if you always want them
+                                        to be hidden, set this to 1. If the
+                                        first time the plugin is activate, is
+                                        through WinManager, and if this setting
+                                        is not overridden in vimrc, then the
+                                        buffer numbers are automatically hidden.
+                                        Note that you can always toggle this
+                                        using the |SelBufTBufNumsKey|,
+                                        irrespective of this setting.
+    selBufAlwaysShowDetails     0       The plugin by default hides extra
+                                        details for the buffers (that is shown
+                                        by using the |:ls| command), but if
+                                        you want that to be always displayed,
+                                        set this to 1. Note that you can
+                                        always toggle this using the
+                                        |SelBufTDetailsKey|, irrespective of
+                                        this setting.
+    selBufAlwaysShowHelp        0       By default, the plugin hides the help
+                                        header as it occupies a lot of real
+                                        estate. But, if you want this to be
+                                        displayed then set this to 1. Note
+                                        that you can always toggle this using
+                                        the |SelBufTHelpKey| irrespective of
+                                        this setting.
+    selBufAlwaysShowHidden      0       The plugin by default hides the hidden
+                                        buffers, but if you want them to be
+                                        always shown, set this to 1. Note that
+                                        you can always toggle this using the
+                                        |SelBufTHiddenKey|, irrespective of
+                                        this setting.
+    selBufAlwaysShowPaths       0       The plugin by default hides the full
+                                        path names of the buffers, but if you
+                                        always want them to be shown, set this
+                                        to 1. Note that you can always toggle
+                                        this using the |SelBufTHidePathsKey|,
+                                        irrespective of this setting.
+    selBufBrowserMode           split   The mode of operation for browser. In
+                                        split mode the plugin always
+                                        split-opens the browser window
+                                        (resulting in a new window). In switch
+                                        mode, the existing window is reused for
+                                        the browser, so quitting the browser
+                                        using |SelBufQuitKey| will switch back
+                                        to the original buffer. In keep mode,
+                                        the plugin split-opens the window, but
+                                        leaves the window open until you
+                                        explicitly close it. The selected buffer
+                                        will be opened in the last accessed
+                                        window.
+    selBufDefaultSortDirection  1       Select the default sort direction. The
+                                        browser will start in this sort
+                                        direction, but it can later be changed
+                                        by using the |SelBufSortRevKey|. The
+                                        default is to sort in the ascending
+                                        order. Set it to -1 to sort in the
+                                        descending order.
+    selBufDefaultSortOrder      mru     Select the default sort order. The
+                                        browser will start with this sort order,
+                                        which can always be changed by using the
+                                        |SelBufSortSelectFKey| and
+                                        |SelBufSortSelectBKey|. Other possible
+                                        values are: number, name,
+                                                             path, type,
+                                                             indicators, mru.
+    selBufDelayedDynUpdate      1       By default, the plugin waits for the
+                                        browser window to get focus before
+                                        making updates for the buffers added
+                                        and deleted (and when MRU order
+                                        changes), even when the browser window
+                                        is visible. This again is a little more
+                                        efficient than making the updates
+                                        immediately, but if you don't want this
+                                        feature, then set this to 0.
+    selBufDisableMRUlisting     0       Disable generating an MRU listing of
+                                        the file usage. If you don't use MRU
+                                        sorting, then disabling this should
+                                        improve the performance a little bit.
+                                        Also, before opening a large set of
+                                        files at one time (using :next */java
+                                        command, e.g.), disabling this is
+                                        advisable to avoid the MRU overhead.
+    selBufDisableSummary        1       Setting this to a zero will enable some
+                                        summary messages, but if your
+                                        'cmdheight' setting is too small (1 is
+                                        usually too small), you may end up
+                                        seeing too many more prompts, so it is
+                                        recommended to increase the 'cmdheight'
+                                        value to at least 2.
+    selBufEnableDynUpdate       1       By default, the plugin dynamically
+                                        updates the browser as and when buffers
+                                        get added and deleted. This usually is
+                                        much more efficient than generating the
+                                        list every time, but if you want to
+                                        disable this feature, then set this to
+                                        0.
+    selBufHighlightOnlyFilename 0       A non-zero value for this setting makes
+                                        the plugin highlight only the filename
+                                        when the full path is shown, making it
+                                        easy to spot the filename.
+    selBufIgnoreNonFileBufs     1       Normally, the plugin ignores all the
+                                        non-file buffers (those that have
+                                        'buftype' option set) for MRU ordering
+                                        and a few others. These are usually the
+                                        buffers that belong to various plugin
+                                        and you don't really want to see them in
+                                        the list. Setting this to 0 will make
+                                        the plugin treat all the buffers same.
+    selBufRestoreWindowSizes    1       A non-zero value for this setting
+                                        will make the plugin save the window
+                                        sizes when the browser is opened and
+                                        restore them while closing it. Set this
+                                        to 0 to disable the feature.
+    selBufSplitType             <none>  
+                                        If set, this is prefixed to the |split|
+                                        command used for opening the browser
+                                        window. See |:vertical| for possible
+                                        options.
+    selBufUseVerticalSplit      0       If you set this to 1, the plugin uses
+                                        vertically-split window when it opens
+                                        the browser window. This can always be
+                                        achieved by setting "selBufSplitType" to
+                                        "vertical" but it is recommended to use
+                                        this setting instead, as the plugin does
+                                        some additional customizations when this
+                                        is on.
+
+
+Note that these variables are required only during the startup and
+consequently are removed by the plugin after the initialization is complete.
+This avoids cluttering the global name space. If you want to change the values
+of these settings in the current vim session, then use |SBSettings| command.
+
+                                            *selectbuf-header*
+The browser window always shows a one-line header with a brief information on
+what display related settings are currently on. An example header is given
+below: >
+
+    "= Sorting=mru,showDetails=0,showHidden=0,showPaths=0,hideBufNums=0
+<
+==============================================================================
+
+                                            *selectbuf-changes-3.0*
+- Dropped selBufWindowName, selBufRemoveBrowserBuffer, selBufOpenInNewWindow,
+  selBufAlwaysWrapLines, selBufAlwaysShowDirectories settings.
+- Added |selBufIgnoreNonFileBufs|, |selBufEnableDynUpdate|,
+  |selBufDelayDynUpdate|, |selBufDisableSummary|, |selBufIgnoreNonFileBufs|,
+  |selBufEnableDynUpdate| settings.
+- I have also changed some default settings to the most favored values.
+- Renamed SelBufHelpKey mapping to |SelBufTHelpKey|.
+- Changed the name of the browser window to "[Select Buf]" from
+  "__Select_Buf__".
+- Added |SBSettings| command.
+- Added support to work as a WinManager plugin.
+
+                                            *selectbuf-known-issues*
+- Opening a large set of files at a time takes longer than it would usually
+  take. This is because, the plugin has to generate an MRU list for each buffer
+  that gets loaded into the vim. I have observed that opening 1500 files at a
+  time took almost 40 to 50% longer. If there are other plugins that manage MRU
+  lists at the same time, the impact can be even worse. You can temporarily
+  disable MRU feature in selectbuf (and later enable it back) by using the
+  |selBufDisableMRUlisting| setting. This should reduce the time taken for
+  loading the buffers, though the MRU listing then may not show all the
+  buffers. You may have to select a different sort field and probably do a
+  refresh (unless the |selBufEnableDynUpdate| is disabled) before you can see
+  the complete list.
+
+                                            *selectbuf-wishlist*
+TBD
+
+ vim6:tw=80:ts=8:ft=help:ai:sw=4:et

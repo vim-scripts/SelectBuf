@@ -1,293 +1,195 @@
-" sel12-Feb-2002 @ 17:55
-" Author: Hari Krishna <hari_vim@yahoo.com>
-" Last Change: 12-Feb-2002 @ 17:55
-" Created:     20-Jul-1999
-" Requires: Vim-6.0, multvals.vim(2.0.5), genutils.vim(1.0.6)
-" Version: 2.2.4
-" Download latest version from:
-"           http://vim.sourceforge.net/scripts/script.php?script_id=107
+" selectbuf.vim
+" Author: Hari Krishna <hari_vim at yahoo dot com>
+" Last Change: 25-Mar-2003 @ 17:59PM
+" Created: Before 20-Jul-1999 (http://groups.yahoo.com/group/vim/message/6409)
+" Requires: Vim-6.0, multvals.vim(3.1), genutils.vim(1.4)
+" Version: 3.0.22
+" Licence: This program is free software; you can redistribute it and/or
+"          modify it under the terms of the GNU General Public License.
+"          See http://www.gnu.org/copyleft/gpl.txt 
+" Download From:
+"     http://www.vim.org/script.php?script_id=107
+" Usage: 
+"   For detailed help, see ":help selectbuf" or doc/selectbuf.txt. 
 "
-"  Source this file or drop it in plugin directory and press <F3> to get the
-"    list of buffers.
-"  Move the cursor on to the buffer that you need to select and press <CR> or
-"    double click with the left-mouse button.
-"  If you want to close the window without making a selection, press <F3> again.
-"  You can also press ^W<CR> to open the file in a new window.
-"  You can use d to delete the buffer.
-"  For convenience when the browser is opened, the line corresponding to the
-"    next buffer is marked with 'a so that you can quickly go to the next
-"    buffer.
+"   Source this file or drop it in plugin directory and press <F3> to get the
+"     list of buffers.
+"   Move the cursor on to the buffer that you need to select and press <CR> or
+"     double click with the left-mouse button.
+"   If you want to close the window without making a selection, press <F3>
+"     again.
+"   You can also press ^W<CR> or O to open the file in a new or previous window.
+"   You can use d to delete or D to wipeout the buffer. Use d again to
+"     undelete a previously deleted buffer (you need to first view the deleted
+"     buffers using u command).
 "
-"  You can define your own mapping to activat the browser using the following:
-"    nmap <your key sequence here> <Plug>SelectBuf
-"  The default is to use <F3>.
-"
-" To change the default behavior, copy the following configuration properties
-"   into your .vimrc and change the values. These are one time use global
-"   variables, and so will be unset after the script is loaded, to avoid
-"   cluttering the global name space.
-"
-"     nmap <silent> <unique> ,sb <Plug>SelectBuf
-"     let g:selBufWindowName = '---\ Select\ Buffer\ ---'
-"     let g:selBufOpenInNewWindow = 0
-"     let g:selBufRemoveBrowserBuffer = 0
-"     let g:selBufHighlightOnlyFilename = 0
-"     let g:selBufRestoreWindowSizes = 1
-"     let g:selBufDefaultSortOrder = "number" " number, name, path, type, indicators, mru.
-"     let g:selBufAlwaysShowHelp = 0
-"     let g:selBufAlwaysShowHidden = 0
-"     let g:selBufAlwaysShowDetails = 0
-"     let g:selBufAlwaysShowDirectories = 1
-"     let g:selBufAlwaysWrapLines = 0
-"     let g:selBufAlwaysShowPaths = 1
-"     let g:selBufBrowserMode = "keep" " split, switch, keep
-"     let g:selBufUseVerticalSplit = 1 " Uses the vertically split windows.
-"     let g:selBufSplitType = "topleft" " See :h vertical for possible options.
-"     let g:selBufDisableMRUlisting = 1 " Disable generating an MRU listing of the file usage.
-"
-" You can also change the default key mappings for all the operations, e.g.,
-"
-"     nmap <script> <silent> <Plug>SelBufHelpKey <C-H> " Default: ?
-"
-" Here is the complete list of all the key map and their default key:
-"     <Plug>SelBufSelectKey		Default: <CR>
-"     <Plug>SelBufMSelectKey		Default: <2-LeftMouse>
-"     <Plug>SelBufWSelectKey		Default: <C-W><CR>
-"     <Plug>SelBufDeleteKey		Default: d
-"     <Plug>SelBufWipeOutKey		Default: D
-"     <Plug>SelBufDeleteKey		Default: d
-"     <Plug>SelBufWipeOutKey		Default: D
-"     <Plug>SelBufTDetailsKey		Default: i
-"     <Plug>SelBufTHiddenKey		Default: u
-"     <Plug>SelBufTDirsKey		Default: c
-"     <Plug>SelBufTLineWrapKey		Default: p
-"     <Plug>SelBufTHidePathsKey		Default: P
-"     <Plug>SelBufRefreshKey		Default: R
-"     <Plug>SelBufSortSelectFKey	Default: s
-"     <Plug>SelBufSortSelectBKey	Default: S
-"     <Plug>SelBufSortRevKey		Default: r
-"     <Plug>SelBufQuitKey		Default: q
-"     <Plug>SelBufHelpKey		Default: ?
-"
+" TODO:
 
 if exists("loaded_selectbuf")
   finish
 endif
 let loaded_selectbuf=1
 
-
+" Make sure line-continuations won't cause any problem. This will be restored
+"   at the end
+let s:save_cpo = &cpo
+set cpo&vim
+                      
 " Call this any time to reconfigure the environment. This re-performs the same
-"   initializations that the script does during the vim startup.
+"   initializations that the script does during the vim startup, without
+"   loosing what is already configured.
 command! -nargs=0 SBInitialize :call <SID>Initialize()
 
-"
-" BEGIN configuration.
-"
-
-function! Initialize()
+" Initializations {{{
+function! s:Initialize() " {{{
 
 "
-" The name of the browser. The default is "---Select_Buffer---", but you can
-"   change the name at your will.
+"" START: configuration 
 "
-if exists("g:selBufWindowName")
-  let s:windowName = g:selBufWindowName
-  unlet g:selBufWindowName
-else
-  let s:windowName = '---Select_Buffer---'
-endif
 
-"
-" A non-zero value for the variable selBufOpenInNewWindow means that the
-"   selected buffer should be opened in a separate window. The value zero will
-"   open the selected buffer in the current window.
-"
-if exists("g:selBufOpenInNewWindow")
-  let s:openInNewWindow = g:selBufOpenInNewWindow
-  unlet g:selBufOpenInNewWindow
-else
-  let s:openInNewWindow = 0
-endif
-
-"
-" A non-zero value for the variable selBufRemoveBrowserBuffer means that after
-"   the selection is made, the buffer that belongs to the browser should be
-"   deleted. But this is not advisable as vim doesn't reuse the buffer numbers
-"   that are no longer used. The default value is 0, i.e., reuse a single
-"   buffer. This will avoid creating a lot of buffers and quickly reach large
-"   buffer numbers for the new buffers created.
-if exists("g:selBufRemoveBrowserBuffer")
-  let s:removeBrowserBuffer = g:selBufRemoveBrowserBuffer
-  unlet g:selBufRemoveBrowserBuffer
-else
-  let s:removeBrowserBuffer = 0
-endif
-
-"
-" A non-zero value for the variable selBufHighlightOnlyFilename will highlight
-"   only the filename instead of the whole path. The default value is 0.
-if exists("g:selBufHighlightOnlyFilename")
-  let s:highlightOnlyFilename = g:selBufHighlightOnlyFilename
-  unlet g:selBufHighlightOnlyFilename
-else
+if !exists("s:disableSummary") " The first-time only, initialize with defaults.
+  let s:disableSummary = 1
   let s:highlightOnlyFilename = 0
-endif
-
-"
-" A non-zero value for the variable selBufRestoreWindowSizes will save the
-"   window sizes when the browser is opened and restore them while closing it.
-"   The default value is 1.
-if exists("g:selBufRestoreWindowSizes")
-  let s:restoreWindowSizes = g:selBufRestoreWindowSizes
-  unlet g:selBufRestoreWindowSizes
-else
   let s:restoreWindowSizes = 1
-endif
-
-"
-" The default sort order. Browser will start with this sort order.
-"   The default value is "number".
-if exists("g:selBufDefaultSortOrder")
-  " INFO: We allow both name and number as sorttype value, but the
-  "   SortListing expects only number values. The actual trick is done by the
-  "   SortSelect, which converts the name type to number type before invoking
-  "   SortListing.
-  let s:sorttype = g:selBufDefaultSortOrder
-  unlet g:selBufDefaultSortOrder
-else
-  let s:sorttype = "number"
-endif
-
-"
-" If help should be shown always.
-" The default is to NOT to show help.
-"
-if exists("g:selBufAlwaysShowHelp")
-  let s:showHelp = g:selBufAlwaysShowHelp
-  unlet g:selBufAlwaysShowHelp
-else
+  let s:sorttype = "mru"
+  let s:sortdirection = 1
+  let s:ignoreNonFileBufs = 1
   let s:showHelp = 0
-endif
-
-"
-" Should hide the hidden buffers or not.
-" The default is to NOT to show hidden buffers.
-"
-if exists("g:selBufAlwaysShowHidden")
-  let s:showHidden = g:selBufAlwaysShowHidden
-  unlet g:selBufAlwaysShowHidden
-else
   let s:showHidden = 0
-endif
-
-"
-" If additional details about the buffers should be shown.
-" The default is to NOT to show details.
-"
-if exists("g:selBufAlwaysShowDetails")
-  let s:showDetails = g:selBufAlwaysShowDetails
-  unlet g:selBufAlwaysShowDetails
-else
   let s:showDetails = 0
-endif
-
-"
-" If the directory buffers should be hidden from the list.
-" The default is to NOT to hide directory buffers.
-"
-if exists("g:selBufAlwaysShowDirectories")
-  let s:showDirectories = g:selBufAlwaysShowDirectories
-  unlet g:selBufAlwaysShowDirectories
-else
-  let s:showDirectories = 1
-endif
-
-"
-" If the lines should be wrapped.
-" The default is to NOT to wrap.
-"
-if exists("g:selBufAlwaysWrapLines")
-  let s:wrapLines = g:selBufAlwaysWrapLines
-  unlet g:selBufAlwaysWrapLines
-else
-  let s:wrapLines = 0
-endif
-
-"
-" If the paths should be shown.
-" The default is to NOT to hide.
-"
-if exists("g:selBufAlwaysShowPaths")
-  let s:showPaths = g:selBufAlwaysShowPaths
-  unlet g:selBufAlwaysShowPaths
-else
-  let s:showPaths = 1
-endif
-
-"
-" Defines the mode of operation for the browser.
-" The default is 0 for "split". Other possible values are:
-"   1 - switch
-"   2 - keep
-" The "split" mode always opens the browser after creating a new window, and
-"   closes it after selecting a browser.
-" The "switch" mode doesn't do the above and tries to reuse the current window.
-" The "keep" keeps the browser always open. It opens the selected browser in
-"   the most recently used window.
-if exists("g:selBufBrowserMode")
-  let s:browserMode = g:selBufBrowserMode
-  unlet g:selBufBrowserMode
-else
+  let s:showPaths = 0
+  let s:hideBufNums = 0
   let s:browserMode = "split"
-endif
-
-
-"
-" If a the window should be split vertically.
-" The defaul is NOT to split verticall.
-"
-if exists("g:selBufUseVerticalSplit")
-  let s:useVerticalSplit = g:selBufUseVerticalSplit
-  unlet g:selBufUseVerticalSplit
-else
   let s:useVerticalSplit = 0
+  let s:splitType = ""
+  let s:disableMRUlisting = 0
+  let s:enableDynUpdate = 1
+  let s:delayedDynUpdate = 1
 endif
 
-"
-" Specify the split type.
-"
-if exists("g:selBufSplitType")
-  let s:splitType = g:selBufSplitType
-  unlet g:selBufSplitType
-endif
+function! s:CondDefSetting(globalName, settingName, ...)
+  let assgnmnt = (a:0 != 0) ? a:1 : a:globalName
+  if exists(a:globalName)
+    exec "let" a:settingName "=" assgnmnt
+    exec "unlet" a:globalName
+  endif
+endfunction
 
-"
-" Disable generating an MRU listing of the file usage. If you never use this
-"   feature, you may as well disable this feature as it reduces the
-"   autocommands and may contribute to improved performance.
-" The deafult is NOT to disable this feature.
-"
-if exists("g:selBufDisableMRUlisting")
-  let s:disableMRU = g:selBufDisableMRUlisting
-  unlet g:selBufDisableMRUlisting
-else
-  let s:disableMRU = 0
-endif
-
-
+call s:CondDefSetting('g:selBufDisableSummary', 's:disableSummary')
+call s:CondDefSetting("g:selBufHighlightOnlyFilename",
+      \ 's:highlightOnlyFilename')
+call s:CondDefSetting("g:selBufRestoreWindowSizes", 's:restoreWindowSizes')
+call s:CondDefSetting("g:selBufDefaultSortOrder", 's:sorttype')
+call s:CondDefSetting("g:selBufDefaultSortDirection", 's:sortdirection')
+call s:CondDefSetting("g:selBufIgnoreNonFileBufs", 's:ignoreNonFileBufs')
+call s:CondDefSetting("g:selBufAlwaysShowHelp", 's:showHelp')
+call s:CondDefSetting("g:selBufAlwaysShowHidden", 's:showHidden')
+call s:CondDefSetting("g:selBufAlwaysShowDetails", 's:showDetails')
+call s:CondDefSetting("g:selBufAlwaysShowPaths", 's:showPaths')
+call s:CondDefSetting("g:selBufAlwaysHideBufNums",
+      \ 's:hideBufNums | let s:userDefinedHideBufNums = 1')
+call s:CondDefSetting("g:selBufBrowserMode", 's:browserMode')
+call s:CondDefSetting("g:selBufUseVerticalSplit", 's:useVerticalSplit')
+call s:CondDefSetting("g:selBufSplitType", 's:splitType')
+call s:CondDefSetting("g:selBufDisableMRUlisting", 's:disableMRUlisting')
+call s:CondDefSetting("g:selBufEnableDynUpdate", 's:enableDynUpdate')
+call s:CondDefSetting("g:selBufDelayedDynUpdate", 's:delayedDynUpdate')
 
 "
 " END configuration.
 "
 
+let s:windowName = '[Select Buf]'
+
+" For WinManager integration.
+let g:SelectBuf_title = s:windowName
+
 "
-" Initialize some variables.
+" Define a default mapping if the user hasn't defined a map.
 "
-" To store the buffer from which the browser is invoked.
-let s:originalBuffer = 1
-" characters that must be escaped for a regular expression
-let s:savePositionInSort = 1
+if !hasmapto('<Plug>SelectBuf') &&
+      \ (! exists("no_plugin_maps") || ! no_plugin_maps) &&
+      \ (! exists("no_selectbuf_maps") || ! no_selectbuf_maps)
+  nmap <unique> <silent> <F3> <Plug>SelectBuf
+endif
+
+
+" This default mappings are just for the reverse lookup (maparg()) to work
+" always.
+function! s:DefDefMap(mapType, mapKeyName, defaultKey)
+  if maparg('<Plug>SelBuf' . a:mapKeyName) == ''
+    exec a:mapType . "noremap <script> <silent> <Plug>SelBuf" . a:mapKeyName
+	  \ a:defaultKey
+  endif
+endfunction
+call s:DefDefMap('n', 'SelectKey', "<CR>")
+call s:DefDefMap('n', 'MSelectKey', "<2-LeftMouse>")
+call s:DefDefMap('n', 'WSelectKey', "<C-W><CR>")
+call s:DefDefMap('n', 'OpenKey', "O")
+call s:DefDefMap('n', 'DeleteKey', "d")
+call s:DefDefMap('n', 'WipeOutKey', "D")
+call s:DefDefMap('v', 'DeleteKey', "d")
+call s:DefDefMap('v', 'WipeOutKey', "D")
+call s:DefDefMap('n', 'TDetailsKey', "i")
+call s:DefDefMap('n', 'THiddenKey', "u")
+call s:DefDefMap('n', 'TBufNumsKey', "p")
+call s:DefDefMap('n', 'THidePathsKey', "P")
+call s:DefDefMap('n', 'RefreshKey', "R")
+call s:DefDefMap('n', 'SortSelectFKey', "s")
+call s:DefDefMap('n', 'SortSelectBKey', "S")
+call s:DefDefMap('n', 'SortRevKey', "r")
+call s:DefDefMap('n', 'QuitKey', "q")
+call s:DefDefMap('n', 'THelpKey', "?")
+call s:DefDefMap('n', 'ShowSummaryKey', "<C-G>")
+delfunction s:DefDefMap
+
+
+"
+" Define a command too (easy for debugging).
+"
+command! -nargs=0 SelectBuf :call <SID>ListBufs()
+" commands to manipulate the MRU list.
+command! -nargs=1 SBBufToHead :call <SID>PushToFrontInMRU(
+      \ (<f-args> !~ '^\d\+$') ? bufnr(<f-args>) : <f-args>)
+command! -nargs=1 SBBufToTail :call <SID>PushToBackInMRU(
+      \ (<f-args> !~ '^\d\+$') ? bufnr(<f-args>) : <f-args>)
+" Command to change settings interactively.
+command! -nargs=0 SBSettings :call <SID>SBSettings()
+
+" The main plug-in mapping.
+noremap <script> <silent> <Plug>SelectBuf :call <SID>ListBufs()<CR>
+
+" Deleting autocommands first is a good idea especially if we want to reload
+"   the script without restarting vim.
+aug SelectBuf
+  au!
+  au BufWinEnter * :call <SID>BufWinEnter()
+  au BufWinLeave * :call <SID>BufWinLeave()
+  au BufWipeout * :call <SID>BufWipeout()
+  au BufDelete * :call <SID>BufDelete()
+  au BufAdd * :call <SID>BufAdd()
+aug END
+
+endfunction " -- Initialize }}}
+
+" Do the actual initialization.
+call s:Initialize()
+
+" One-time initialization of some script variables {{{
+" These are typically those that save the state are some constants which are
+"   not impacted directly by user.
+" This is the current buffer when the browser is invoked ('%').
+let s:originalCurBuffer = 1
+" This is the alternate buffer when the browser is invoked ('#').
+let s:originalAltBuffer = 1
+" The size of the current header. Used for mapping file names to buffer
+"   numbers when buffer numbers are hidden.
+let s:headerSize = 0
+let s:myBufNum = -1
 let s:savedSearchString = ""
+" The operating mode for the current session. This is reset after the browser
+"   is closed. Ideally, we assume that the browser is open in only one window.
+let s:opMode = ""
 
 let s:sortByNumber=0
 let s:sortByName=1
@@ -298,9 +200,26 @@ let s:sortByMRU=5
 let s:sortByMaxVal=5
 
 let s:sortdirlabel  = ""
-" Default Sort type is initialized above from an user setting.
-"let s:sorttype = 0
-let s:sortdirection = 1
+
+let s:pendingUpdAxns = ""
+let s:auSuspended = 1 " Disable until we are ready.
+let s:bufList = ""
+let s:indList = ""
+
+let s:settings = 'AlwaysHideBufNums,AlwaysShowDetails,AlwaysShowHelp,' .
+      \ 'AlwaysShowHidden,AlwaysShowPaths,BrowserMode,DefaultSortDirection,' .
+      \ 'DefaultSortOrder,DelayedDynUpdate,DisableMRUlisting,DisableSummary,' .
+      \ 'EnableDynUpdate,HighlightOnlyFilename,IgnoreNonFileBufs,' .
+      \ 'RestoreWindowSizes,SplitType,UseVerticalSplit'
+" Map of global variable name to the local variable that are different than
+"   their global counterparts.
+let s:settingsMap{'DefaultSortOrder'} = 'sorttype'
+let s:settingsMap{'DefaultSortDirection'} = 'sortdirection'
+let s:settingsMap{'AlwaysShowHelp'} = 'showHelp'
+let s:settingsMap{'AlwaysShowHidden'} = 'showHidden'
+let s:settingsMap{'AlwaysShowDetails'} = 'showDetails'
+let s:settingsMap{'AlwaysShowPaths'} = 'showPaths'
+let s:settingsMap{'AlwaysHideBufNums'} = 'hideBufNums'
 
 " This is the list maintaining the MRU order of buffers.
 let s:MRUlist = ''
@@ -312,176 +231,138 @@ function! s:MyScriptId()
   return substitute(s:sid, "xx$", "", "")
 endfunction
 let s:myScriptId = s:MyScriptId()
+delfunction s:MyScriptId
 
-
-"
-" Define a default mapping if the user hasn't defined a map.
-"
-if !hasmapto('<Plug>SelectBuf')
-  nmap <unique> <silent> <F3> <Plug>SelectBuf
-endif
-
-"
-" Define a command too (easy for debugging).
-"
-if !exists(":SelectBuf")
-  command! -nargs=0 SelectBuf :call <SID>ListBufs()
-endif
-
-" commands to manipulate the MRU list.
-if !exists(":SBBufToHead")
-  command! -nargs=1 SBBufToHead :call <SID>PushToFrontInMRU(<f-args>)
-endif
-
-if !exists(":SBBufToTail")
-  command! -nargs=1 SBBufToTail :call <SID>PushToBackInMRU(<f-args>)
-endif
-
-" The main plug-in mapping.
-noremap <script> <silent> <Plug>SelectBuf :call <SID>ListBufs()<CR>
-
-" Deleting autocommands first is a good idea especially if we want to reload
-"   the script without restarting vim.
-aug SelectBuf
-  au!
-  exec "au BufWinEnter " . s:windowName . " :call <SID>UpdateBuffer()"
-  exec "au BufWinLeave " . s:windowName . " :call <SID>Done()"
-  "exec "au WinLeave " . s:windowName . " :call <SID>RestoreWindows()"
-  if ! s:disableMRU
-    au BufWinEnter * :call <SID>PushToFrontInMRU(bufnr('%'))
-    au BufWipeout * :call <SID>DelFromMRU(bufnr(expand("<afile>")))
-  endif
-aug END
-
-endfunction " -- Initialize
-
-" Do the actual initialization.
-call Initialize()
+let s:optMRUfullUpdate = 1
+" One-time initialization of some script variables }}}
+" Initializations }}}
 
 
 "
 " Functions start from here.
 "
 
+" ListBufs: Main User entry function. {{{
+
 function! s:ListBufs()
+  " First check if the browser window is already visible.
+  let browserWinNo = bufwinnr(s:myBufNum)
 
-  " For use with the display.
-  let s:originalBuffer = bufnr("%")
-  let s:originalAltBuffer = bufnr("#")
-  " This will not add it to the history.
-  let prevSearchString = s:savedSearchString
-  " Save the current search string to be able to restore it later.
-  if histnr("search") != -1
-    let s:savedSearchString = histget("search", -1)
-  endif
-  let savedUnnamedRegister = @"
+  let splitCommand = ""
+  if browserWinNo == -1
+    let s:opMode = 'user'
 
-  " First check if there is a browser already running.
-  let browserWinNo = FindWindowForBuffer(
-          \ substitute(s:windowName, '\\ ', ' ', "g"), 1)
-  if browserWinNo != -1
-    call MoveCursorToWindow(browserWinNo)
-  else
     " If user wants us to save window sizes and restore them later.
     "   But don't save unless "split" mode, as otherwise we are not creating a
     "   new window.
-    if s:restoreWindowSizes && s:GetModeTypeByName(s:browserMode) == 0
-      call SaveWindowSettings()
+    if s:restoreWindowSizes && s:browserMode == "split"
+      call SaveWindowSettings2(s:myScriptId, 1)
     endif
 
     " Don't split window for "switch" mode.
-    if s:GetModeTypeByName(s:browserMode) != 1
-      let splitCommand = ""
+    if s:browserMode != "switch"
       " If user specified a split type, use that.
-      if exists("s:splitType")
-        let splitCommand = splitCommand .  s:splitType
-      endif
+      let splitCommand = splitCommand .  s:splitType
       if s:useVerticalSplit
         let splitCommand = splitCommand . " vert "
       endif
       let splitCommand = splitCommand . " split"
-      exec splitCommand
     endif
   endif
 
-  if browserWinNo == -1
-    " Find if there is a buffer already created.
-    let bufNo = FindBufferForName(s:windowName)
-    if bufNo != -1
-      " Switch to the existing buffer.
-      exec "buffer " . bufNo
-    else
-      " Create a new buffer.
-      exec ":e " . s:windowName
-    endif
-    " The actual work should have been done by now by the BufWinEnter
-    "   autocommand.
-  else
-    " Since we have the browser already open, we have to update the window
-    "   explicitly.
-    call s:UpdateBuffer()
+  " We need to update these before we switch to the browser window.
+  if browserWinNo != winnr()
+    let s:originalCurBuffer = bufnr("%")
+    let s:originalAltBuffer = bufnr("#")
   endif
 
-  if line("'t") != 0
-    't
+  call s:SuspendAutoUpdates()
+
+  call s:GoToBrowserWindow(browserWinNo, splitCommand)
+  call s:UpdateBuffer(0) " It will do a full refresh if required, anyway.
+  call s:ResumeAutoUpdates()
+
+  if s:opMode == 'user' && s:browserMode != 'keep'
+    if s:savedSearchString != ''
+      let @/ = s:savedSearchString
+    endif
+    let s:savedSearchString = histget('search')
+    call histadd("search", @/) " Ignores the call if it is empty.
+
+    " Arrange a notification of the window close on this window.
+    call AddNotifyWindowClose(s:windowName, s:myScriptId . "RestoreWindows")
   endif
-  if prevSearchString != ""
-    let @/ = prevSearchString
-    call histadd ("search", @/)
-  else
-    let @/ = s:savedSearchString
-  endif
-  let @" = savedUnnamedRegister
 endfunction " ListBufs
 
 
+function! s:AutoListBufs()
+  if s:auSuspended
+    return
+  endif
+  " If opMode is empty, it means the browser window entered through backdoor
+  " (by e#<browserBufNumber> e.g.)
+  if s:opMode == ""
+    let s:opMode = 'auto'
+  endif
+  call s:ListBufs()
+endfunction
+
+" ListBufs }}}
+
+
+" Buffer Update {{{
+" Header {{{
 function! s:UpdateHeader()
-  let _report=&report
-  let &report=99999
+  setlocal modifiable
 
   " Remember the position.
-  mark z
-  let @/ = '^"='
-  0
-  silent! 1,//delete
+  call SaveSoftPosition("UpdateHeader")
+  if search('^"= ', 'w')
+    silent! 1,.delete _
+  endif
 
   call s:AddHeader()
-  0
-  call search('^"=', "W")
-  mark t
+  call search('^"= ', "w")
+  let s:headerSize = line(".")
 
-  " For vertical split, we shouldn't adjust the number of lines.
-  if ! s:useVerticalSplit
+  if s:opMode == 'WinManager'
+    call WinManagerForceReSize('SelectBuf')
+  else
     call s:AdjustWindowSize()
   endif
 
   " Return to the original position.
-  if line("'z") != 0
-    normal! `z
-  endif
+  call RestoreSoftPosition("UpdateHeader")
 
-  let &report=_report
+  setlocal nomodifiable
 endfunction " UpdateHeader
 
+function s:MapArg(key)
+  return maparg('<Plug>SelBuf' . a:key)
+endfunction
 
 function! s:AddHeader()
   let helpMsg=""
-  let helpKey = maparg("<Plug>SelBufHelpKey")
-  if helpKey == ""
-    let helpKey = "?"
-  endif
+  let helpKey = maparg("<Plug>SelBufTHelpKey")
   if s:showHelp
     let helpMsg = helpMsg
-      \ . "\" <Enter> or Left-double-click : open current buffer\n"
-      \ . "\" <C-W><Enter> : open buffer in a new window\n"
-      \ . "\" d : delete/undelete current buffer\tD : wipeout current buffer\n"
-      \ . "\" i : toggle additional details\t\tp : toggle line wrapping\n"
-      \ . "\" c : toggle directory buffers\t\tu : toggle hidden buffers\n"
-      \ . "\" P : toggle show paths\t\t\t\n"
-      \ . "\" R : refresh browser\t\t\tq : close browser\n"
-      \ . "\" s/S : select sort field for/backward\tr : reverse sort\n"
+      \ . "\" " . s:MapArg("SelectKey") . " or " . s:MapArg("MSelectKey") .
+      \	    " : open current buffer\n"
+      \ . "\" " . s:MapArg("WSelectKey") . "/" . s:MapArg("OpenKey") .
+      \	    " : open buffer in a new/previous window\n"
+      \ . "\" " . s:MapArg("DeleteKey") . " : delete/undelete current buffer\t"
+      \	    . s:MapArg("WipeOutKey") . " : wipeout current buffer\n"
+      \ . "\" " . s:MapArg("TDetailsKey") . " : toggle additional details\t\t" .
+      \	    s:MapArg("TBufNumsKey") . " : toggle show buffer numbers\n"
+      \ . "\" " . s:MapArg("THidePathsKey") . " : toggle show paths\t\t\t" .
+      \	    s:MapArg("THiddenKey") . " : toggle hidden buffers\n"
+      \ . "\" " . s:MapArg("RefreshKey") . " : refresh browser\t\t\t" .
+      \	    s:MapArg("QuitKey") . " : close browser\n"
+      \ . "\" " . s:MapArg("SortSelectFKey") . "/" . s:MapArg("SortSelectBKey")
+      \	    . " : select sort field for/backward\t" . s:MapArg("SortRevKey") .
+      \	    " : reverse sort\n"
       \ . "\" Next, Previous & Current buffers are marked 'a', 'b' & 'c' "
-        \ . "respectively\n"
+	\ . "respectively\n"
       \ . "\" Press " . helpKey . " to hide help\n"
   else
     let helpMsg = helpMsg
@@ -490,128 +371,374 @@ function! s:AddHeader()
   let helpMsg = helpMsg . "\"=" . " Sorting=" . s:sortdirlabel .
               \ s:GetSortNameByType(s:sorttype) .
               \ ",showDetails=" . s:showDetails .
-              \ ",showHidden=" . s:showHidden . ",showDirs=" .
-              \ s:showDirectories . ",wrapLines=" . s:wrapLines .
-              \ ",showPaths=" . s:showPaths .
+              \ ",showHidden=" . s:showHidden . ",showPaths=" . s:showPaths .
+	      \ ",hideBufNums=" . s:hideBufNums .
               \ "\n"
   0
-  put! =helpMsg
+  " Silence a vim internal error about undo buffer. There seems to be no other
+  "   side effects.
+  silent! put! =helpMsg
 endfunction " AddHeader
+" Header }}}
 
-
-function! s:UpdateBuffer()
+function! s:UpdateBuffer(fullUpdate) " {{{
   call s:SetupBuf()
-  let _report=&report
-  let &report = 10000
+
+  " If this is the first time we are updating the buffer, we need to do
+  " everything from scratch.
+  if getline(1) == "" || a:fullUpdate || ! s:enableDynUpdate
+    call s:FullUpdate()
+  else
+    call s:IncrementalUpdate()
+  endif
+
+  if s:opMode == 'WinManager'
+    call WinManagerForceReSize('SelectBuf')
+  else
+    call s:AdjustWindowSize()
+  endif
+endfunction " UpdateBuffer " }}}
+
+function! s:AutoUpdateBuffer(fullUpdate) " {{{
+  if s:auSuspended
+    return
+  endif
+
+  call s:UpdateBuffer(a:fullUpdate)
+endfunction " }}}
+
+function! s:FullUpdate() " {{{
   setlocal modifiable
-  " Delete the contents (if any) first.
-  silent! 0,$delete
+
+  " Go as far as possible in the undo history to conserve Vim resources.
+  let i = 0
+  while line('$') != 1 && i < &undolevels
+    silent! undo
+    let i = i + 1
+  endwhile
+  " Delete the contents if there are still any.
+  silent! 0,$delete _
 
   call s:AddHeader()
-  $d _
-  mark t
+  silent! $delete _ " Delete one empty extra line at the end.
+  let s:headerSize = line("$")
 
   $
-  let headerSize = line("$")
-
   " Loop over all the buffers.
-  let i = 1
   let nBuffers = 0
   let nBuffersShown = 0
   let newLine = ""
   let showBuffer = 0
-  while i <= bufnr("$")
+  let s:bufList = ""
+  let lastBufNr = bufnr('$')
+  if s:optMRUfullUpdate && s:GetSortNameByType(s:sorttype) == 'mru'
+    let i = s:NextBufInMRU()
+  else
+    let i = 1
+  endif
+  while i <= lastBufNr
     if bufexists(i)
       let newLine = ""
-      let showBuffer = 0
+      let showBuffer = 1
 
       " If user wants to hide hidden buffers.
-      if s:showHidden && bufexists(i)
-        let showBuffer = 1
-      elseif ! s:showHidden && buflisted(i)
-        let showBuffer = 1
-      endif
-
-      " If user wants to hide directory buffers.
-      if ! s:showDirectories && isdirectory(bufname(i))
+      if s:ignoreNonFileBufs && getbufvar(i, '&buftype') != ''
+	let showBuffer = 0
+      elseif ! s:showHidden && ! buflisted(i)
         let showBuffer = 0
       endif
 
       if showBuffer
-        if exists("g:noOptimize") && g:noOptimize
-        let newLine = s:GetBufLine(i)
-        call append(line("$"), newLine)
-        else
-        " Hopefully this is easier on sorting.
-        call append(line("$"), i)
-        endif
+	let s:bufList = s:bufList . i . "\n"
+	let newLine = s:GetBufLine(i)
+	silent! call append(line("$"), newLine)
         let nBuffersShown = nBuffersShown + 1
       endif
       let nBuffers = nBuffers + 1
     endif
-    let i = i + 1
-  endwhile
-  0
-  " If found.
-  if search('^' . s:originalBuffer, "W")
-    mark c
-    if line(".") < line("$")
-      +mark a " Mark the next line.
+    if s:optMRUfullUpdate && s:GetSortNameByType(s:sorttype) == 'mru'
+      let i = s:NextBufInMRU()
+    else
+      let i = i + 1
     endif
-    -mark b " Mark the previous line.
-  endif
-  let &report=_report
-  " This is not needed because of the buftype setting.
-  "set nomodified
-  setlocal nomodifiable
-
-  " Finally sort the listing based on the current settings.
-  let _savePositionInSort = s:savePositionInSort
-  let s:savePositionInSort = 0
-  call s:SortSelect(0)
-  " Finally add the additional info.
-  if ! exists("g:noOptimize") || ! g:noOptimize
-  call s:AddInfo()
-  endif
-  let s:savePositionInSort = _savePositionInSort
-
-  " For vertical split, we shouldn't adjust the number of lines.
-  "if ! s:useVerticalSplit
-    " Now that our Save/RestoreWindowSettings() is working correctly, it should
-    "   be fine.
-    call s:AdjustWindowSize()
-  "endif
-  redraw | echo "Total buffers: " . nBuffers . " Showing: " . nBuffersShown
-endfunction " UpdateBuffer
-
-
-function! s:AddInfo()
-  setlocal modifiable
-  0
-  call search('^"=', "W")
-  while search('^\d\+$', "W") != 0
-    let bufNum = s:GetCurrentBufferNumber()
-    "echomsg "bufNum = " . bufNum . " bufLine = " . s:GetBufLine(bufNum)
-    call setline(".", s:GetBufLine(bufNum))
   endwhile
+
+  if line("$") != s:headerSize
+    " Finally sort the listing based on the current settings.
+    if (!s:optMRUfullUpdate || s:GetSortNameByType(s:sorttype) != 'mru') &&
+	  \ s:GetSortNameByType(s:sorttype) != 'number'
+      call s:SortBuffers(0)
+    endif
+
+    if s:hideBufNums
+      call s:RemoveBufNumbers()
+    endif
+  endif
+
+  call s:MarkBuffers()
+
+  " Since we did a full refresh, we shouldn't need them.
+  let s:pendingUpdAxns = ""
+
+  if search('^"= ', "w")
+    +
+  endif
+
+  if ! s:disableSummary
+    redraw | echohl SelBufSummary |
+	  \ echo "Total buffers: " . nBuffers . " Showing: " . nBuffersShown |
+	  \ echohl None
+  endif
   setlocal nomodifiable
-endfunction " AddInfo
+endfunction " FullUpdate " }}}
+
+" Incremental update support {{{
+function! s:IncrementalUpdate()
+  " If there are no pending updates, then we don't have to do anything.
+  if s:pendingUpdAxns == ""
+    return
+  endif
+
+  if search('^"= ', 'w') != 0
+    let s:headerSize = line('.')
+  endif
+
+  call SaveSoftPosition("IncrementalUpdate")
+
+  if s:hideBufNums
+    call s:AddBufNumbers()
+  endif
+
+  setlocal modifiable
+
+  call MvIterCreate(s:pendingUpdAxns, ',', 'SelectBufUpdateAxns')
+  while MvIterHasNext('SelectBufUpdateAxns')
+    let nextAxn = MvIterNext('SelectBufUpdateAxns')
+    let bufNo = nextAxn + 0
+    let action = nextAxn[strlen(nextAxn) - 1] " Last char.
+
+    " For delete, skip when we are showing hidden buffers but not details.
+    if action == 'd' && s:showHidden && ! s:showDetails
+      continue
+      " For create, skip when the buffer is hidden and we don't show hidden
+      " buffers.
+    elseif action == 'c' && ! s:showHidden && ! buflisted(bufNo)
+      continue
+    endif
+
+    if search('^' . bufNo . '\>', 'w') > 0
+      if action == 'u' || (action == 'd' && s:showHidden)
+	call setline('.', s:GetBufLine(bufNo))
+	continue
+      else
+	silent! .delete _
+      endif
+    endif
+    if action == 'c' || action == 'm'
+      let bufLine = s:GetBufLine(bufNo)
+      let lineNoToInsert = BinSearchForInsert(s:headerSize + 1, line("$"),
+	    \ bufLine, s:GetSortCmpFnByType(s:GetSortTypeByName(s:sorttype)),
+	    \ s:sortdirection)
+      silent! call append(lineNoToInsert, bufLine)
+    endif
+  endwhile
+  call MvIterDestroy('SelectBufUpdateAxns')
+  let s:pendingUpdAxns = ""
+
+  call s:MarkBuffers()
+
+  setlocal nomodifiable
+
+  if s:hideBufNums
+    call s:RemoveBufNumbers()
+  endif
+
+  call RestoreSoftPosition("IncrementalUpdate")
+endfunction " IncrementalUpdate
+
+" action:
+"   c - buffer added (add line).
+"   d - buffer deleted (remove only if !showHidden and update otherwise).
+"   w - buffer wipedout (remove in any case).
+"   u - needs an update.
+"   m - needs to be moved (remove and add back).
+function! s:DynUpdate(action, bufNum)
+  let bufNo = a:bufNum
+  if bufNo == -1 || bufNo == s:myBufNum || s:auSuspended
+    return
+  endif
+  if s:ignoreNonFileBufs && getbufvar(bufNo, '&buftype') != ''
+    return
+  endif
+
+  let ignore = 0
+  if (a:action == 'u' || a:action == 'm') &&
+	\ MvContainsPattern(s:pendingUpdAxns, ',', bufNo . 'c')
+    let ignore = 1
+  elseif a:action == 'w'
+    while 1
+      let pendingUpdAxns = s:pendingUpdAxns
+      let s:pendingUpdAxns = MvRemovePattern(s:pendingUpdAxns, ',',
+	    \ bufNo . '\a')
+      if pendingUpdAxns == s:pendingUpdAxns
+	break
+      endif
+    endwhile
+  elseif MvContainsPattern(s:pendingUpdAxns, ',', bufNo . a:action)
+    let ignore = 1
+  endif
+  if ! ignore
+    let s:pendingUpdAxns = s:pendingUpdAxns . bufNo . a:action. ',' 
+  endif
+
+  " We need to do this before we move to the browser window.
+  let s:originalCurBuffer = bufnr("%")
+  let saveAltBuf = s:originalAltBuffer
+  let s:originalAltBuffer = bufnr("#")
+  " Update the previous alternative buffer.
+  if s:showDetails && saveAltBuf != s:originalAltBuffer
+    let s:pendingUpdAxns = s:pendingUpdAxns . saveAltBuf . 'u,'
+  endif
+
+  let browserWinNo = bufwinnr(s:myBufNum)
+  if ! s:delayedDynUpdate && browserWinNo != -1
+    let prevWin = winnr()
+    call s:SuspendAutoUpdates()
+
+    call s:GoToBrowserWindow(browserWinNo, "")
+    call s:UpdateBuffer(0)
+    if winnr() != prevWin " Just precautionary.
+      wincmd p
+    endif
+
+    call s:ResumeAutoUpdates()
+  endif
+endfunction
+" Incremental update support }}}
+
+" Event handlers {{{
+function! s:BufWinEnter()
+  call s:PushToFrontInMRU(expand("<abuf>") + 0)
+endfunction
+
+function! s:BufWinLeave()
+  call s:DynUpdate('u', expand("<abuf>") + 0)
+endfunction
+
+function! s:BufWipeout()
+  call s:DelFromMRU(expand("<abuf>") + 0)
+  if s:enableDynUpdate
+    call s:DynUpdate('w', expand("<abuf>") + 0)
+  endif
+endfunction
+
+function! s:BufDelete()
+  if s:enableDynUpdate
+    call s:DynUpdate('d', expand("<abuf>") + 0)
+  endif
+endfunction
+
+function! s:BufAdd()
+  call s:AddToMRU(expand("<abuf>") + 0)
+  if s:enableDynUpdate
+    call s:DynUpdate('c', expand("<abuf>") + 0)
+  endif
+endfunction
+" Event handlers }}}
+" Buffer Update }}}
 
 
-function! s:GetBufLine(bufNum)
+" Buffer line operations {{{
+
+" Add/Remove buffer/indicators numbers {{{
+function! s:RemoveBufNumbers()
+  let s:bufList = s:RemoveColumn(1)
+endfunction " RemoveBufNumbers
+
+
+function! s:AddBufNumbers()
+  call s:AddColumn(1, s:bufList)
+endfunction " AddBufNumbers
+
+"function! s:RemoveIndicators()
+"  let s:indList = s:RemoveColumn(2)
+"endfunction " RemoveIndicators
+"
+"
+"function! s:AddIndicators()
+"  call s:AddColumn(2, s:indList)
+"endfunction " AddIndicators
+
+function! s:RemoveColumn(colNum)
+  if line("$") == s:headerSize
+    return
+  endif
+  0
+  call search('^"= ', "w")
+  +
+  let _z = @z
+  setlocal modifiable
+  " Position correctly.
+  exec "normal! 0"
+  let colNum = a:colNum
+  if s:hideBufNums && colNum > 1
+    let colNum = colNum - 1
+  endif
+  if colNum != 1
+    "let oldvcol = virtcol('.')
+    " TODO: Doesn't work for last column, but not required right now.
+    silent! exec "normal! " . (colNum - 1) . "f\<Tab>l"
+  endif
+  silent! exec "normal! \<C-V>Gf\<Tab>\"zd"
+  setlocal nomodifiable
+  let block = @z
+  let @z = _z
+  return block
+endfunction " RemoveColumn
+
+function! s:AddColumn(colNum, block)
+  if line("$") == s:headerSize || a:block == ""
+    return
+  endif
+  let _z = @z
+  setlocal modifiable
+  silent! $put =a:block
+  silent! exec "normal! \<C-V>G$\"zyu"
+  0
+  call search('^"= ', "w")
+  +
+  exec "normal! 0"
+  let colNum = a:colNum
+  if s:hideBufNums && colNum > 1
+    let colNum = colNum - 1
+  endif
+  if colNum == 1
+    exec "normal! P"
+  else
+    silent! exec "normal! " . (colNum - 1) . "f\<Tab>p"
+  endif
+  setlocal nomodifiable
+  let @z = _z
+endfunction " AddColumn
+" Add/Remove buffer/indicators numbers }}}
+
+
+" GetBufLine {{{
+function! s:GetBufLine(bufNum, ...)
+  if a:bufNum == -1
+    return ""
+  endif
   let newLine = ""
   let newLine = newLine . a:bufNum . "\t"
   " If user wants to see more details.
-  if s:showDetails
+  if s:showDetails || a:0
     if !buflisted(a:bufNum)
       let newLine = newLine . "u"
     else
       let newLine = newLine . " "
     endif
 
-    " Bluff a little bit here about the current and alternate buffers.
-    "  Not accurate though.
-    if s:originalBuffer == a:bufNum
+    if s:originalCurBuffer == a:bufNum
       let newLine = newLine . "%"
     elseif s:originalAltBuffer == a:bufNum
       let newLine = newLine . "#"
@@ -621,19 +748,18 @@ function! s:GetBufLine(bufNum)
 
     if bufloaded(a:bufNum)
       if bufwinnr(a:bufNum) != -1
-        " Active buffer.
-        let newLine = newLine . "a"
+	" Active buffer.
+	let newLine = newLine . "a"
       else
-        let newLine = newLine . "h"
+	let newLine = newLine . "h"
       endif
     else
       let newLine = newLine . " "
     endif
 
-    let myBufNr = FindBufferForName(s:windowName)
     " Special case for "my" buffer as I am finally going to be
     "  non-modifiable, anyway.
-    if getbufvar(a:bufNum, "&modifiable") == 0 || myBufNr == a:bufNum
+    if getbufvar(a:bufNum, "&modifiable") == 0 || s:myBufNum == a:bufNum
       let newLine = newLine . "-"
     elseif getbufvar(a:bufNum, "&readonly") == 1
       let newLine = newLine . "="
@@ -643,84 +769,91 @@ function! s:GetBufLine(bufNum)
 
     " Special case for "my" buffer as I am finally going to be
     "  non-modified, anyway.
-    if getbufvar(a:bufNum, "&modified") == 1 && myBufNr != a:bufNum
+    if getbufvar(a:bufNum, "&modified") == 1 && a:bufNum != a:bufNum
       let newLine = newLine . "+"
     else
       let newLine = newLine . " "
     endif
     let newLine = newLine . "\t"
   endif
-  if s:showPaths
-    let newLine = newLine . bufname(a:bufNum)
+  if s:showPaths || a:0
+    let bufName = bufname(a:bufNum)
   else
-    let newLine = newLine . fnamemodify(bufname(a:bufNum), ":t")
+    " TODO: expand('#'.a:bufNum.':t') also works here, have to check which is
+    " better.
+    let bufName = fnamemodify(bufname(a:bufNum), ":t")
   endif
+  if bufName == ""
+    let bufName = "[No File]"
+  endif
+  let newLine = newLine . bufName
   return newLine
-endfunction " GetBufLine
-
-
-function! s:AdjustWindowSize()
-  " Set the window size to one more than just required.
-  0
-  if NumberOfWindows() != 1
-    exec "resize" . (line("$") + 1)
-    "silent! exec "normal! \<C-W>_"
-  endif
 endfunction
+" GetBufLine }}}
 
 
-function! s:SelectCurrentBuffer(openInNewWindow)
-  if search("^\"=", "W") != 0
+function! s:SelectCurrentBuffer(openMode) " {{{
+  if search("^\"= ", "W") != 0
     +
     return
   endif
 
-  let selectedBufferNumber = s:GetCurrentBufferNumber()
-  if selectedBufferNumber == -1
+  let selBufNum = s:GetCurrentBufferNumber()
+  if selBufNum == -1
     +
     return
   endif
 
-  " Quit window only for "split" mode.
+  " If running under WinManager, let it open the file.
+  if s:opMode == 'WinManager'
+    "call WinManagerFileEdit(bufname(selBufNum), a:openMode)
+    call WinManagerFileEdit(selBufNum, a:openMode)
+    return
+  endif
+
   let didQuit = 0
-  if s:GetModeTypeByName(s:browserMode) == 0
-    if ! (a:openInNewWindow || s:openInNewWindow)
-      " In any case, if there is only one window, then don't quit.
-      if (NumberOfWindows() > 1)
-        silent! quit
-        let didQuit = 1
-      endif
-    endif
-    let v:errmsg = ""
-  elseif s:GetModeTypeByName(s:browserMode) == 2
-    " Switch to the most recently used window.
+  if a:openMode == 2
+    " Behaves temporarily like "keep"
     wincmd p
+  elseif a:openMode == 1
+    " We will just skip calling Quit() here, because we will change to the
+    " selected buffer anyway soon.
+    let s:opMode = 'auto'
+  else
+    let didQuit = s:Quit(1)
   endif
+
   " If we are not quitting the window, then there is no point trying to restore
   "   the window settings.
-  if ! didQuit
+  if ! didQuit && s:browserMode == "split"
     call RemoveNotifyWindowClose(s:windowName)
-    call ResetWindowSettings()
+    call ResetWindowSettings2(s:myScriptId)
   endif
 
-  silent! exec "buffer" selectedBufferNumber
+  let v:errmsg = ""
+  silent! exec "buffer" selBufNum
 
-  if v:errmsg != ""
+  " E325 is the error message that you see when the file is curerntly open in
+  "   another vim instance.
+  if v:errmsg != "" && v:errmsg !~ '^E325: ATTENTION'
     split
-    exec "buffer" selectedBufferNumber
+    exec "buffer" selBufNum
     redraw | echohl Error |
-       \ echo "Couldn't open buffer " . selectedBufferNumber .
+       \ echo "Couldn't open buffer " . selBufNum .
        \   " in window " . winnr() ", creating a new window." |
        \ echo "Error Message: " . v:errmsg |
        \ echohl None
   endif
-endfunction " SelectCurrentBuffer
+endfunction " SelectCurrentBuffer }}}
 
 
-function! s:DeleteCurrentBuffer(wipeout) range
-  let _report=&report
-  let &report = 10000
-  call SaveHardPositionWithContext(s:myScriptId)
+" Buffer Deletions {{{
+function! s:DeleteBuffers(wipeout) range
+  if s:opMode == 'WinManager'
+    call WinManagerSuspendAUs()
+  endif
+
+  call SaveHardPosition('DeleteBuffers')
 
   if a:firstline == 0 || a:lastline == 0
     let a:firstline = line(".")
@@ -734,47 +867,40 @@ function! s:DeleteCurrentBuffer(wipeout) range
   let deletedMsg = ""
   let undeletedMsg = ""
   let wipedoutMsg = ""
+  call s:SuspendAutoUpdates()
+  setlocal modifiable
+  silent! execute line
   while line <= a:lastline
-    silent execute line
-
-    let selectedBufferNumber = s:GetCurrentBufferNumber()
-    if selectedBufferNumber != -1
-      let deleteLine = 0
-      let refreshBuffer = 0
+    let selectedBufNum = s:GetCurrentBufferNumber()
+    if selectedBufNum != -1
       if a:wipeout
-        exec "bwipeout" selectedBufferNumber
-        let deleteLine = 1
+        exec "bwipeout" selectedBufNum
         let nWipedout = nWipedout + 1
-        let wipedoutMsg = wipedoutMsg . " " . selectedBufferNumber
-      elseif buflisted(selectedBufferNumber)
-        exec "bdelete" selectedBufferNumber
+        let wipedoutMsg = wipedoutMsg . " " . selectedBufNum
+	silent! delete _
+      elseif buflisted(selectedBufNum)
+        exec "bdelete" selectedBufNum
         if ! s:showHidden
-          let deleteLine = 1
+	  silent! delete _
         else
-          let deleteLine = 0
-          let refreshBuffer = 1
+	  call setline('.', s:GetBufLine(selectedBufNum))
+	  silent! +
         endif
         let nDeleted = nDeleted + 1
-        let deletedMsg = deletedMsg . " " . selectedBufferNumber
+        let deletedMsg = deletedMsg . " " . selectedBufNum
       else
         " Undelete buffer.
-        call setbufvar(selectedBufferNumber, "&buflisted", "1")
-        let deleteLine = 0
-        let refreshBuffer = 1
+        call setbufvar(selectedBufNum, "&buflisted", "1")
+        call setline('.', s:GetBufLine(selectedBufNum))
+	silent! +
         let nUndeleted = nUndeleted + 1
-        let undeletedMsg = undeletedMsg . " " . selectedBufferNumber
-      endif
-      if deleteLine
-        setlocal modifiable
-        silent! delete
-        setlocal nomodifiable
-        " This is not needed because of the buftype setting.
-        "set nomodified
+        let undeletedMsg = undeletedMsg . " " . selectedBufNum
       endif
     endif
-    silent +
     let line = line + 1
   endwhile
+  call s:ResumeAutoUpdates()
+  setlocal nomodifiable
 
   let msg = ""
   if nWipedout > 0
@@ -790,18 +916,15 @@ function! s:DeleteCurrentBuffer(wipeout) range
     let msg = msg . " undeleted (listed).\n"
   endif
 
-  " If the additional details are being shown, then we may have to update the
-  "   buffer.
-  if s:showDetails && refreshBuffer
-    call s:UpdateBuffer()
-  endif
-
-  call RestoreHardPositionWithContext(s:myScriptId)
-  let &report=_report
+  call RestoreHardPosition('DeleteBuffers')
 
   redraw | echo msg
   "call input(msg)
-endfunction " DeleteCurrentBuffer
+
+  if s:opMode == 'WinManager'
+    call WinManagerResumeAUs()
+  endif
+endfunction " DeleteBuffers
 
 
 function! s:GetDeleteMsg(nBufs, msg)
@@ -809,57 +932,62 @@ function! s:GetDeleteMsg(nBufs, msg)
           \ a:msg
   return msg
 endfunction
+" Buffer Deletions }}}
+
+" Buffer line operations }}}
 
 
-function! s:Quit()
-  if s:GetModeTypeByName(s:browserMode) == 1
-    e#
-    return
-  endif
+" Buffer Setup/Cleanup {{{
 
-  if NumberOfWindows() > 1
-    silent! quit
+function! s:SetupBuf() " {{{
+  setlocal noreadonly " Or it shows [RO] after the buffer name, not nice.
+  call SetupScratchBuffer()
+  setlocal nowrap
+  setlocal nonumber
+  setlocal foldcolumn=0
+  setlocal tabstop=8
+  if s:enableDynUpdate
+    setlocal bufhidden=hide
   else
-    redraw | echo "Can't quit the last window"
-  endif
-endfunction
-
-
-function! s:SetupBuf()
-  " We don't need to set this as the buftype setting below takes care of it.
-  setlocal noswapfile
-  set nobuflisted
-  setlocal buftype=nofile
-  " Just in case, this will make sure we are always hidden.
-  setlocal bufhidden=delete
-  if s:wrapLines
-    setlocal wrap
-  else
-    setlocal nowrap
+    setlocal bufhidden=delete
   endif
 
-  "
-  " Start syntax rules.
-  "
+  " Add autocommands for automatically updating the buffer when the browser
+  " buffer is made visible by other means.
+  aug SelectBufAutoUpdate
+  au!
+  exec "au BufWinEnter " . escape(s:windowName, '\[*^$. ') .
+        \ " :call <SID>AutoListBufs()"
+  exec "au BufWinLeave " . escape(s:windowName, '\[*^$. ') .
+        \ " :call <SID>Done()"
+  exec "au WinEnter " . escape(s:windowName, '\[*^$. ') .
+        \ " :call <SID>AutoUpdateBuffer(0)"
+  aug END
+
+  " Start syntax rules. {{{
+  "" 
+
+  " Do only if they are not already done, may save some time.
+  "if hlID("SelBufMapping") == 0
 
   " The mappings in the help header.
   syn match SelBufMapping "\s\(\i\|[ /<>-]\)\+ : " contained
   syn match SelBufHelpLine "^\" .*$" contains=SelBufMapping
 
   " The starting line. Summary of current settings.
-  syn keyword SelBufKeyWords Sorting showDetails showHidden showDirs wrapLines showPaths bufNameOnly contained
+  syn keyword SelBufKeyWords Sorting showDetails showHidden showDirs showPaths bufNameOnly hideBufNums contained
   syn region SelBufKeyValues start=+=+ end=+,+ end=+$+ skip=+ + contained
   syn match SelBufKeyValuePair +\i\+=\i\++ contained contains=SelBufKeyWords,SelBufKeyValues
   syn match SelBufSummary "^\"= .*$" contains=SelBufKeyValuePair
 
-  syn match SelBufBufNumber "^\d\+" contained
-  if s:highlightOnlyFilename
-    syn match SelBufBufName "\([^/\\ \t]\+\)$" contained
-  else
-    syn match SelBufBufName "\([a-zA-Z]:\)\=\([/\\]\{-}\p\{-1,}\)$" contained
-  endif
-  syn match SelBufBufIndicators "\(\t\| \)[^\t]*\t" contained
   syn match SelBufBufLine "^[^"].*$" contains=SelBufBufNumber,SelBufBufIndicators,SelBufBufName
+  syn match SelBufBufNumber "^\d\+" contained
+  syn match SelBufBufIndicators "\t[^\t]*\t" contained
+  if s:highlightOnlyFilename
+    syn match SelBufBufName "\([^/\\\t]\{-1,}\)$" contained
+  else
+    syn match SelBufBufName "\(\p\| \)*$" contained
+  endif
 
 
   hi def link SelBufHelpLine      Comment
@@ -870,225 +998,486 @@ function! s:SetupBuf()
   hi def link SelBufKeyValues     Constant
 
   hi def link SelBufBufNumber     Constant
-  hi def link SelBufBufIndicators Comment
+  hi def link SelBufBufIndicators Label
   hi def link SelBufBufName       Directory
 
-  "
-  " End Syntax rules.
-  "
+  hi def link SelBufSummary       Special
 
-  call s:DefineMapFromKey("nnore", "<Plug>SelBufSelectKey", "<CR>", ":call <SID>SelectCurrentBuffer(0)<CR>")
-  call s:DefineMapFromKey("nnore", "<Plug>SelBufMSelectKey", "<2-LeftMouse>", ":call <SID>SelectCurrentBuffer(0)<CR>")
-  call s:DefineMapFromKey("nnore", "<Plug>SelBufWSelectKey", "<C-W><CR>", ":call <SID>SelectCurrentBuffer(1)<CR>")
-  call s:DefineMapFromKey("nnore", "<Plug>SelBufDeleteKey", "d", ":call <SID>DeleteCurrentBuffer(0)<CR>")
-  call s:DefineMapFromKey("nnore", "<Plug>SelBufWipeOutKey", "D", ":call <SID>DeleteCurrentBuffer(1)<CR>")
-  call s:DefineMapFromKey("vnore", "<Plug>SelBufDeleteKey", "d", ":call <SID>DeleteCurrentBuffer(0)<CR>")
-  call s:DefineMapFromKey("vnore", "<Plug>SelBufWipeOutKey", "D", ":call <SID>DeleteCurrentBuffer(1)<CR>")
-  call s:DefineMapFromKey("nnore", "<Plug>SelBufTDetailsKey", "i", ":call <SID>ToggleDetails()<CR>")
-  call s:DefineMapFromKey("nnore", "<Plug>SelBufTHiddenKey", "u", ":call <SID>ToggleHidden()<CR>")
-  call s:DefineMapFromKey("nnore", "<Plug>SelBufTDirsKey", "c", ":call <SID>ToggleDirectories()<CR>")
-  call s:DefineMapFromKey("nnore", "<Plug>SelBufTLineWrapKey", "p", ":call <SID>ToggleWrap()<CR>")
-  call s:DefineMapFromKey("nnore", "<Plug>SelBufTHidePathsKey", "P", ":call <SID>ToggleHidePaths()<CR>")
-  call s:DefineMapFromKey("nnore", "<Plug>SelBufRefreshKey", "R", ":call <SID>UpdateBuffer()<CR>")
-  call s:DefineMapFromKey("nnore", "<Plug>SelBufSortSelectFKey", "s", ":call <SID>SortSelect(1)<cr>")
-  call s:DefineMapFromKey("nnore", "<Plug>SelBufSortSelectBKey", "S", ":call <SID>SortSelect(-1)<cr>")
-  call s:DefineMapFromKey("nnore", "<Plug>SelBufSortRevKey", "r", ":call <SID>SortReverse()<cr>")
-  call s:DefineMapFromKey("nnore", "<Plug>SelBufQuitKey", "q", ":call <SID>Quit()<CR>")
-  call s:DefineMapFromKey("nnore", "<Plug>SelBufHelpKey", "?", ":call <SID>ToggleHelpHeader()<CR>")
+  "endif
 
-  " This is not needed because of the buftype setting.
-  "cabbr <buffer> <silent> w :
-  "cabbr <buffer> <silent> wq q
+  "
+  " End Syntax rules. }}}
+
+  " Maps {{{
+  call s:DefMap("n", "SelectKey", "<CR>",
+	\ ":call <SID>SelectCurrentBuffer(0)<CR>")
+  call s:DefMap("n", "MSelectKey", "<2-LeftMouse>",
+	\ ":call <SID>SelectCurrentBuffer(0)<CR>")
+  call s:DefMap("n", "WSelectKey", "<C-W><CR>",
+	\ ":call <SID>SelectCurrentBuffer(1)<CR>")
+  call s:DefMap("n", "OpenKey", "O", ":call <SID>SelectCurrentBuffer(2)<CR>")
+  call s:DefMap("n", "DeleteKey", "d", ":call <SID>DeleteBuffers(0)<CR>")
+  call s:DefMap("n", "WipeOutKey", "D", ":call <SID>DeleteBuffers(1)<CR>")
+  call s:DefMap("v", "DeleteKey", "d", ":call <SID>DeleteBuffers(0)<CR>")
+  call s:DefMap("v", "WipeOutKey", "D", ":call <SID>DeleteBuffers(1)<CR>")
+  call s:DefMap("n", "TDetailsKey", "i", ":call <SID>ToggleDetails()<CR>")
+  call s:DefMap("n", "THiddenKey", "u", ":call <SID>ToggleHidden()<CR>")
+  call s:DefMap("n", "TBufNumsKey", "p", ":call <SID>ToggleHideBufNums()<CR>")
+  call s:DefMap("n", "THidePathsKey", "P", ":call <SID>ToggleHidePaths()<CR>")
+  call s:DefMap("n", "RefreshKey", "R", ":call <SID>UpdateBuffer(1)<CR>")
+  call s:DefMap("n", "SortSelectFKey", "s", ":call <SID>SortSelect(1)<cr>")
+  call s:DefMap("n", "SortSelectBKey", "S", ":call <SID>SortSelect(-1)<cr>")
+  call s:DefMap("n", "SortRevKey", "r", ":call <SID>SortReverse()<cr>")
+  call s:DefMap("n", "QuitKey", "q", ":call <SID>Quit(0)<CR>")
+  call s:DefMap("n", "THelpKey", "?", ":call <SID>ToggleHelpHeader()<CR>")
+  call s:DefMap("n", "ShowSummaryKey", "\<C-G>",
+	\ ":echohl SelBufSummary \\| echo <SID>GetBufLine(" .
+	\   " <SID>GetCurrentBufferNumber(), 1) \\| echohl NONE<CR>")
+
+  if ! s:disableSummary
+    nnoremap <silent> <buffer> j j:call <SID>EchoCurrentBufferName()<CR>
+    nnoremap <silent> <buffer> k k:call <SID>EchoCurrentBufferName()<CR>
+    nnoremap <silent> <buffer> <Up> <Up>:call <SID>EchoCurrentBufferName()<CR>
+    nnoremap <silent> <buffer> <Down>
+	  \ <Down>:call <SID>EchoCurrentBufferName()<CR>
+    nnoremap <silent> <buffer> <LeftMouse>
+	  \ <LeftMouse>:call <SID>EchoCurrentBufferName()<CR>
+  else
+    silent! nunmap <buffer> j
+    silent! nunmap <buffer> k
+    silent! nunmap <buffer> <Up>
+    silent! nunmap <buffer> <Down>
+    silent! nunmap <buffer> <LeftMouse>
+  endif
+  " Maps }}}
+
+  " Commands {{{ 
   " Toggle the same key to mean "Close".
-  nnoremap <buffer> <silent> <Plug>SelectBuf :call <SID>Quit()<CR>
+  nnoremap <buffer> <silent> <Plug>SelectBuf :call <SID>Quit(0)<CR>
 
-  " Define some local command too for ease of debugging.
+  " Define some local command too for the ease of debugging.
+  if exists("s:debug") && s:debug 
   command! -nargs=0 -buffer SB :call <SID>SelectCurrentBuffer(0)
   command! -nargs=0 -buffer SBS :call <SID>SelectCurrentBuffer(1)
-  command! -nargs=0 -buffer D :call <SID>DeleteCurrentBuffer(0)
-  command! -nargs=0 -buffer DD :call <SID>DeleteCurrentBuffer(1)
+  command! -nargs=0 -buffer D :call <SID>DeleteBuffers(0)
+  command! -nargs=0 -buffer DD :call <SID>DeleteBuffers(1)
   command! -nargs=0 -buffer SS :call <SID>SortSelect(1)
   command! -nargs=0 -buffer SSR :call <SID>SortSelect(-1)
   command! -nargs=0 -buffer SR :call <SID>SortReverse()
-  command! -nargs=0 -buffer SQ :call <SID>Quit()
+  command! -nargs=0 -buffer SQ :call <SID>Quit(0)
+  command! -nargs=0 -buffer STH :call <SID>ToggleHelpHeader()
+  command! -nargs=0 -buffer STP :call <SID>ToggleHideBufNums()
+  command! -nargs=0 -buffer STU :call <SID>ToggleHidden()
+  command! -nargs=0 -buffer STI :call <SID>ToggleDetails()
+  command! -nargs=0 -buffer STPP :call <SID>ToggleHidePaths()
+  command! -nargs=0 -buffer SF :call <SID>UpdateBuffer(1)
+  endif
+  " Commands }}} 
+endfunction " SetupBuf }}}
 
-  " Arrange a notification of the window close on this window.
-  call AddNotifyWindowClose(s:windowName, s:myScriptId . "RestoreWindows")
-endfunction " SetupBuf
+
+" Routing browser quit through this function gives a chance to decide how to
+"   do the exit.
+" Returns 1 when the browser window is really quit. 
+function! s:Quit(scriptOrigin) " {{{
+  " When the browser should be left open, switch to the previously used window
+  "   instead of quitting the window.
+  " The user can still use :q commnad to force a quit.
+  if s:opMode == 'WinManager' || s:browserMode == 'keep'
+    " Switch to the most recently used window.
+    if s:opMode == 'WinManager'
+      let prevWin = bufwinnr(WinManagerGetLastEditedFile())
+      if prevWin != -1
+	exec prevWin . "wincmd w"
+      endif
+    else
+      wincmd p
+    endif
+    return 0
+  endif
+
+  let didQuit = 0
+  " If opMode is empty or 'auto', the browser might have entered through some
+  "   back-door mechanism. We don't want to exit the window in this case.
+  if s:browserMode == "switch" || s:opMode == 'auto' || s:opMode == ''
+    " Switch browser even when the dynamic update is on, as it will allow us
+    "	preserve the contents of the browser as we want.
+    if ! a:scriptOrigin || s:enableDynUpdate
+      e#
+    endif
+
+  " In any case, if there is only one window, then don't quit.
+  elseif NumberOfWindows() > 1
+    let v:errmsg = ""
+    if s:enableDynUpdate
+      hide
+    else
+      silent! quit
+    endif
+    if v:errmsg == ""
+      let didQuit = 1
+    endif
+
+  " Give warning only when the user wanted to quit.
+  elseif ! a:scriptOrigin
+    redraw | echohl WarningMsg | echo "Can't quit the last window" |
+	  \ echohl NONE
+  endif
+
+  if didQuit
+    file
+  endif
+
+  return didQuit
+endfunction " Quit }}}
 
 
-function! s:DefineMapFromKey(mapType, mapKeyName, defaultKey, cmdStr)
-  let key = maparg(a:mapKeyName)
+" This is the function that gets always called no matter how we do the exit
+"   from the browser, giving us a chance to do last minute cleanup.
+function! s:Done() " {{{
+  if s:auSuspended
+    return
+  endif
+
+  " Clear up such that it gets set correctly the next time.
+  let s:opMode = ''
+
+  " Never cleanup when started by WinManager or in keep mode.
+  if s:opMode == 'WinManager' || s:browserMode == 'keep'
+    return
+  endif
+
+  call s:RestoreSearchString()
+endfunction " Done }}}
+
+
+function! s:RestoreWindows(dummyTitle) " {{{
+  " If user wants us to restore window sizes during the exit.
+  if s:restoreWindowSizes && s:browserMode != "keep"
+    call RestoreWindowSettings2(s:myScriptId)
+  endif
+endfunction " }}}
+
+
+function! s:RestoreSearchString() " {{{
+  if s:savedSearchString != ''
+    let @/ = s:savedSearchString " This doesn't modify the history.
+    let s:savedSearchString = histget("search")
+    " Fortunately, this will make sure there is only one copy in the history.
+    call histadd("search", @/)
+  endif
+endfunction " }}}
+
+
+function! s:DefMap(mapType, mapKeyName, defaultKey, cmdStr) " {{{
+  let key = maparg('<Plug>SelBuf' . a:mapKeyName)
   " If user hasn't specified a key, use the default key passed in.
   if key == ""
     let key = a:defaultKey
   endif
-  exec a:mapType . "map <buffer> <silent>" key a:cmdStr
-endfunction
+  exec a:mapType . "noremap <buffer> <silent> " . key a:cmdStr
+endfunction " DefMap " }}}
 
+" Buffer Setup/Cleanup }}}
+
+
+" Utility methods. {{{
+"
+
+function! s:AdjustWindowSize() " {{{
+  call SaveSoftPosition('AdjustWindowSize')
+  " Set the window size to one more than just required.
+  0
+  " For vertical split, we shouldn't adjust the number of lines.
+  if NumberOfWindows() != 1 && ! s:useVerticalSplit
+    let size = (line("$") + 1)
+    if s:opMode == 'WinManager'
+      if size > (&lines / 2)
+	let size = &lines/2
+      endif
+    endif
+    exec "resize" . size
+  endif
+  call RestoreSoftPosition('AdjustWindowSize')
+endfunction " }}}
+
+
+function! s:SuspendAutoUpdates() " {{{
+  " To make it reentrant.
+  if !exists("s:_lazyredraw")
+    let s:auSuspended = 1
+    if s:opMode == 'WinManager'
+      call WinManagerSuspendAUs()
+    endif
+    let s:_lazyredraw = &lazyredraw
+    set lazyredraw
+    let s:_report = &report
+    set report=99999
+  endif
+endfunction " }}}
+
+
+function! s:ResumeAutoUpdates() " {{{
+  " To make it reentrant.
+  if exists("s:_lazyredraw")
+    let &report = s:_report
+    let &lazyredraw = s:_lazyredraw
+    unlet s:_lazyredraw
+    if s:opMode == 'WinManager'
+      call WinManagerResumeAUs()
+    endif
+    let s:auSuspended = 0
+  endif
+endfunction " }}}
+
+
+function! s:GetCurrentBufferNumber() " {{{
+  if s:hideBufNums
+    let bufIndex = line(".") - s:headerSize - 1
+    let bufNo = MvElementAt(s:bufList, "\t\n", bufIndex)
+    if bufNo == ""
+      return -1
+    else
+      return bufNo + 0
+    endif
+  else
+    return s:GetBufferNumber(getline("."))
+  endif
+endfunction " }}}
+
+
+function! s:GetBufferNumber(line) " {{{
+  let bufNumber = matchstr(a:line, '^\d\+')
+  if bufNumber == ""
+    return -1
+  endif
+  return bufNumber + 0 " Convert it to number type.
+endfunction " }}}
+
+
+function! s:EchoCurrentBufferName() " {{{
+  let bufNumber = s:GetCurrentBufferNumber()
+  if bufNumber != -1
+    let bufName = expand('#'.bufNumber.':p')
+    if bufName == ''
+      let bufName = '[No File]'
+    endif
+    echohl SelBufSummary | echo "Buffer: " . bufName | echohl NONE
+  endif
+endfunction " }}}
+
+
+" Place holder function for any future manipulation of window while taking
+" focus into the browser window.
+function! s:GoToBrowserWindow(browserWinNo, splitCommand) " {{{
+  if a:browserWinNo != -1
+    call MoveCursorToWindow(a:browserWinNo)
+  else
+    exec a:splitCommand
+    if s:useVerticalSplit
+      25wincmd |
+    endif
+    " Find if there is a buffer already created.
+    if s:myBufNum != -1
+      " Switch to the existing buffer.
+      exec "buffer " . s:myBufNum
+    else
+      " Create a new buffer.
+      " Temporarily modify isfname to avoid treating the name as a pattern.
+      let _isf = &isfname
+      set isfname-=\
+      set isfname-=[
+      exec ":e \\" . escape(s:windowName, ' ')
+      let &isfname = _isf
+      let s:myBufNum = bufnr('%')
+    endif
+  endif
+endfunction " }}}
+
+function! s:SBSettings() " {{{
+  let selectedSetting = MvPromptForElement2(s:settings, ',', -1,
+	\ "Select the setting: ", -1, 0, 3)
+  if selectedSetting != ""
+    let oldVal = ''
+    let localVar = substitute(selectedSetting, '^\(\u\)', '\L\1', '')
+    if exists("s:" . localVar)
+      exec "let oldVal = s:" . localVar . " . '' "
+    else
+      silent! exec "let oldVal = s:settingsMap{selectedSetting}"
+      if oldVal != ''
+	exec "let oldVal = s:" . oldVal . " . '' "
+      else
+	echoerr "Internal error detected, couldn't locate value for " .
+	      \ selectedSetting
+      endif
+    endif
+    let newVal = input("Current value for " . selectedSetting . " is: " .
+	  \ oldVal . "\nEnter new value: ", oldVal)
+    if newVal != oldVal
+      exec "let g:selBuf" . selectedSetting . " = '" . newVal . "'"
+      call s:Initialize()
+    endif
+  endif
+endfunction " }}}
+
+function! s:MarkBuffers() " {{{
+  " Find current, next and previous buffers.
+  if search('^' . s:originalCurBuffer . '\>', "w") " If found.
+    mark c
+  endif
+  call s:FindAndMarkNextBuffer('a', 1)
+  call s:FindAndMarkNextBuffer('b', -1)
+endfunction " }}}
+
+function! s:FindAndMarkNextBuffer(marker, inc) " {{{
+  let nextBuffer = s:originalCurBuffer + a:inc
+  let lastBufNr = bufnr('$')
+  while ! bufexists(nextBuffer) && nextBuffer < lastBufNr && nextBuffer > 0
+    let nextBuffer = nextBuffer + a:inc
+  endwhile
+  if search('^' . nextBuffer . '\>', "w") " If found.
+    exec "mark " . a:marker
+  endif
+endfunction " }}}
+
+
+"" START: Toggle methods {{{
 
 function! s:ToggleHelpHeader()
   let s:showHelp = ! s:showHelp
   " Don't save/restore position in this case, because otherwise the user may
   "   not be able to view the help if he has listing that is more than one page
   "   (after all what is he viewing the help for ?)
-  setlocal modifiable
   call s:UpdateHeader()
-  setlocal nomodifiable
+  if s:showHelp
+    0 " If you turn on help, you intent to see it right?
+  endif
 endfunction
 
 
 function! s:ToggleDetails()
-  let s:showDetails = ! s:showDetails
-  call SaveHardPositionWithContext(s:myScriptId)
-  call s:UpdateBuffer()
-  call RestoreHardPositionWithContext(s:myScriptId)
+  "if ! s:showDetails && s:indList == ""
+    let s:showDetails = ! s:showDetails
+    call s:UpdateBuffer(1)
+  "else
+  "  if s:showDetails
+  "    call s:RemoveIndicators()
+  "  else
+  "    call s:AddIndicators()
+  "  endif
+  "  let s:showDetails = ! s:showDetails
+  "  call s:UpdateHeader()
+  "endif
 endfunction
 
 
 function! s:ToggleHidden()
   let s:showHidden = ! s:showHidden
-  call SaveHardPositionWithContext(s:myScriptId)
-  call s:UpdateBuffer()
-  call RestoreHardPositionWithContext(s:myScriptId)
+  call s:UpdateBuffer(1)
 endfunction
 
 
-function! s:ToggleDirectories()
-  let s:showDirectories = ! s:showDirectories
-  call SaveHardPositionWithContext(s:myScriptId)
-  call s:UpdateBuffer()
-  call RestoreHardPositionWithContext(s:myScriptId)
-endfunction
-
-
-function! s:ToggleWrap()
-  let &l:wrap = ! &l:wrap
-  let s:wrapLines = &l:wrap
-  call SaveHardPositionWithContext(s:myScriptId)
-  setlocal modifiable
+function! s:ToggleHideBufNums()
+  call SaveHardPosition('ToggleHideBufNums')
+  if ! s:hideBufNums
+    call s:RemoveBufNumbers()
+  else
+    call s:AddBufNumbers()
+  endif
+  let s:hideBufNums = ! s:hideBufNums
   call s:UpdateHeader()
-  setlocal nomodifiable
-  call RestoreHardPositionWithContext(s:myScriptId)
+  call RestoreHardPosition('ToggleHideBufNums')
 endfunction
 
 
 function! s:ToggleHidePaths()
   let s:showPaths = ! s:showPaths
-  call SaveHardPositionWithContext(s:myScriptId)
-  call s:UpdateBuffer()
-  call RestoreHardPositionWithContext(s:myScriptId)
+  call s:UpdateBuffer(1)
 endfunction
 
-
-" FIXME: Should I do this even for "keep" mode?
-function! s:Done()
-  call s:RestoreSearchString()
-
-  " If user wants this buffer be removed...
-  if s:removeBrowserBuffer
-    let myBufNr = FindBufferForName(s:windowName)
-    silent! exec "bwipeout " . myBufNr
-  endif
-endfunction
+"" END: Toggle methods }}}
 
 
-function! s:RestoreWindows(dummyTitle)
-  " If user wants us to restore window sizes during the exit.
-  if s:restoreWindowSizes && s:GetModeTypeByName(s:browserMode) != 2
-  call RestoreWindowSettings()
-  endif
-endfunction
-
-
-function! s:RestoreSearchString()
-  let @/ = s:savedSearchString
-  let s:savedSearchString = histget("search", -1)
-  " Fortunately, this will make sure there is only one copy in the history.
-  call histadd ("search", @/)
-endfunction
-
-
-function! s:GetCurrentBufferNumber()
-  return s:GetBufferNumber(getline("."))
-endfunction
-
-function! s:GetBufferNumber(line)
-  let bufNumber = matchstr(a:line, '^\d\+')
-  if bufNumber == ""
-    return -1
-  endif
-  " Convert it to number type.
-  return bufNumber + 0
-endfunction
-
-
-"
-" Utility methods.
-"
-
-function! s:GetModeNameByType(modeType)
-  if a:modeType == 0
-    return "split"
-  elseif a:modeType == 1
-    return "switch"
-  elseif a:modeType == 2
-    return "keep"
-  elseif match(a:modeType, '\a') != -1
-    return a:modeType
-  else
-    return ""
-  endif
-endfunction
-
-function! s:GetModeTypeByName(modeName)
-  if match(a:modeName, '\d') != -1
-    return (a:modeName + 0)
-  elseif a:modeName == "split"
-    return 0
-  elseif a:modeName == "switch"
-    return 1
-  elseif a:modeName == "keep"
-    return 2
-  else
-    return -1
-  endif
-endfunction
-
-
+" MRU support {{{
 function! s:PushToFrontInMRU(bufNum)
   " Avoid browser buffer to come in the front.
-  if a:bufNum == FindBufferForName(s:windowName)
+  if a:bufNum == -1 || a:bufNum == s:myBufNum || s:disableMRUlisting
       return
-  end
+  endif
+  if s:ignoreNonFileBufs && getbufvar(a:bufNum, '&buftype') != ''
+    return
+  endif
 
   let s:MRUlist = MvPushToFront(s:MRUlist, ',', a:bufNum)
-  let g:MRUlist = s:MRUlist " For debugging.
+  let g:MRUlist = s:MRUlist
+  if s:GetSortNameByType(s:sorttype) == 'mru'
+    call s:DynUpdate('m', a:bufNum + 0)
+  else
+    call s:DynUpdate('u', a:bufNum + 0)
+  endif
 endfunction
-
 
 function! s:PushToBackInMRU(bufNum)
+  if a:bufNum == -1 || a:bufNum == s:myBufNum || s:disableMRUlisting
+    return
+  endif
+  if s:ignoreNonFileBufs && getbufvar(a:bufNum, '&buftype') != ''
+    return
+  endif
+
   let s:MRUlist = MvPullToBack(s:MRUlist, ',', a:bufNum)
-  let g:MRUlist = s:MRUlist " For debugging.
+  let g:MRUlist = s:MRUlist
 endfunction
 
+function! s:AddToMRU(bufNum)
+  if a:bufNum == -1 || a:bufNum == s:myBufNum || s:disableMRUlisting
+    return
+  endif
+  let s:MRUlist = s:MRUlist . a:bufNum . ','
+  let g:MRUlist = s:MRUlist
+endfunction
 
 function! s:DelFromMRU(bufNum)
+  if a:bufNum == -1 || s:disableMRUlisting
+    return
+  endif
   let s:MRUlist = MvRemoveElement(s:MRUlist, ',', a:bufNum)
-  let g:MRUlist = s:MRUlist " For debugging.
+  let g:MRUlist = s:MRUlist
 endfunction
 
+function! s:NextBufInMRU()
+  if !exists("s:NextBufInMRUInitialized")
+    let s:NextBufInMRUInitialized = 1
+    call MvIterCreate(s:MRUlist, ',', 'FullUpdate')
+  endif
 
-"""
-""" Support for sorting... based on the explorer.vim implementation (2.5)
-""" Changed the sort algorithm to speed sorting up.
+  let lastBufNr = bufnr('$')
+  let i = lastBufNr + 1
+  while MvIterHasNext('FullUpdate') && i > lastBufNr
+    let i = MvIterNext('FullUpdate') + 0
+  endwhile
+
+  if ! MvIterHasNext('FullUpdate') && i > lastBufNr
+    call MvIterDestroy('FullUpdate')
+    unlet s:NextBufInMRUInitialized
+  endif
+  return i
+endfunction
+" MRU support }}}
+
+"
+" Utility methods. }}}
+
+
+""" START: Support for sorting... based on explorer.vim {{{
 """
 
-""
-"" Utility methods.
+"" START: Sort Utility methods. {{{
 ""
 function! s:GetSortNameByType(sorttype)
-  if a:sorttype == 0
+  if match(a:sorttype, '\a') != -1
+    return a:sorttype
+  elseif a:sorttype == 0
     return "number"
   elseif a:sorttype == 1
     return "name"
@@ -1100,8 +1489,6 @@ function! s:GetSortNameByType(sorttype)
     return "indicators"
   elseif a:sorttype == 5
     return "mru"
-  elseif match(a:sorttype, '\a') != -1
-    return a:sorttype
   else
     return ""
   endif
@@ -1129,25 +1516,26 @@ endfunction
 
 function! s:GetSortCmpFnByType(sorttype)
   if a:sorttype == 0
-    return "s:CmpByNumber"
+    return s:myScriptId . "CmpByNumber"
   elseif a:sorttype == 1
-    return "s:CmpByName"
+    return s:myScriptId . "CmpByName"
   elseif a:sorttype == 2
-    return "s:CmpByPath"
+    return s:myScriptId . "CmpByPath"
   elseif a:sorttype == 3
-    return "s:CmpByType"
+    return s:myScriptId . "CmpByType"
   elseif a:sorttype == 4
-    return "s:CmpByIndicators"
+    return s:myScriptId . "CmpByIndicators"
   elseif a:sorttype == 5
-    return "s:CmpByMRU"
+    return s:myScriptId . "CmpByMRU"
   else
     return ""
   endif
 endfunction
 
-
 ""
-"" Compare methods added.
+"" END: Sort Utility methods. }}}
+
+"" START: Compare methods. {{{
 ""
 
 function! s:CmpByName(line1, line2, direction)
@@ -1240,19 +1628,22 @@ endfunction
 
 
 function! s:CmpByMRU(line1, line2, direction)
+  if s:disableMRUlisting
+    return 0
+  endif
+
   let num1 = s:GetBufferNumber(a:line1)
   let num2 = s:GetBufferNumber(a:line2)
 
   return MvCmpByPosition(s:MRUlist, ',', num1, num2, a:direction)
 endfunction
 
-"
-" Interface to sort.
+" END: Compare methods. }}}
+
+" START: Interface to sort. {{{
 "
 
-"---
 " Reverse the current sort order
-"
 function! s:SortReverse()
   if exists("s:sortdirection") && s:sortdirection == -1
     let s:sortdirection = 1
@@ -1261,12 +1652,11 @@ function! s:SortReverse()
     let s:sortdirection = -1
     let s:sortdirlabel  = "rev-"
   endif
-  call s:SortListing("")
+  call s:SortBuffers(s:hideBufNums)
+  let s:indList = ""
 endfunction
 
-"---
 " Toggle through the different sort orders
-"
 function! s:SortSelect(inc)
   " Select the next sort option
   let s:sorttype = s:GetSortTypeByName(s:sorttype)
@@ -1279,130 +1669,84 @@ function! s:SortSelect(inc)
     let s:sorttype = s:sortByMaxVal
   endif
 
-  call s:SortListing("")
+  call s:SortBuffers(s:hideBufNums)
+  let s:indList = ""
 endfunction
 
-"---
 " Sort the file listing
-"
-function! s:SortListing(msg)
+function! s:SortBuffers(bufNumsHidden)
     " Save the line we start on so we can go back there when done
     " sorting
-    if s:savePositionInSort
-      call SaveHardPositionWithContext(s:myScriptId)
+    call SaveSoftPosition('SortBuffers')
+
+    if a:bufNumsHidden
+      call s:AddBufNumbers()
     endif
 
     " Allow modification
     setlocal modifiable
-
-    " Send a message about what we're doing
-    " Don't really need this - it can cause hit return prompts
-"   echo a:msg . "Sorting by" . w:sortdirlabel . w:sorttype
-
-    " Create a regular expression out of the suffixes option in case
-    " we need it.
-    "call s:SetSuffixesLast()
-
-    " Remove section separators
-    "call s:RemoveSeparators()
-
     " Do the sort
-    0
-    let @/ = '^"='
-    silent! //+1,$call s:Sort(s:GetSortCmpFnByType(
-      \ s:GetSortTypeByName(s:sorttype)), s:sortdirection)
+    if search('^"= ', 'w')
+      silent! .+1,$call QSort(s:GetSortCmpFnByType(
+	    \ s:GetSortTypeByName(s:sorttype)), s:sortdirection)
+    endif
+    " Disallow modification
+    setlocal nomodifiable
+
+    " Update buffer-list again with the sorted list.
+    if a:bufNumsHidden
+      call s:RemoveBufNumbers()
+    endif
 
     " Replace the header with updated information
     call s:UpdateHeader()
 
-    " Restore section separators
-    "call s:AddSeparators()
-
     " Return to the position we started on
-    if s:savePositionInSort
-      call RestoreHardPositionWithContext(s:myScriptId)
-    endif
-
-    " Disallow modification
-    " This is not needed because of the buftype setting.
-    "setlocal nomodified
-    setlocal nomodifiable
+    call RestoreSoftPosition('SortBuffers')
 endfunction
 
+" END: Interface to Sort. }}}
 
-""
-"" Sort infrastructure.
-""
+"""
+""" START: Support for sorting... based on explorer.vim }}}
 
 
-"---
-" Sort lines.  SortR() is called recursively.
-"
-function! s:SortR(start, end, cmp, direction)
-  if a:end > a:start
-    let low = a:start
-    let high = a:end
+""" START: WinManager hooks. {{{
 
-    " Arbitrarily establish partition element at the midpoint of the data.
-    let midStr = getline((a:start + a:end) / 2)
-
-    " Loop through the data until indices cross.
-    while low <= high
-
-      " Find the first element that is greater than or equal to the partition
-      "   element starting from the left Index.
-      while low < a:end
-        let str = getline(low)
-        exec "let result = " . a:cmp . "(str, midStr, " . a:direction . ")"
-        if result < 0
-          let low = low + 1
-        else
-          break
-        endif
-      endwhile
-
-      " Find an element that is smaller than or equal to the partition element
-      "   starting from the right Index.
-      while high > a:start
-        let str = getline(high)
-        exec "let result = " . a:cmp . "(str, midStr, " . a:direction . ")"
-        if result > 0
-          let high = high - 1
-        else
-          break
-        endif
-      endwhile
-
-      " If the indexes have not crossed, swap.
-      if low <= high
-        " Swap lines low and high.
-        let str2 = getline(high)
-        call setline(high, getline(low))
-        call setline(low, str2)
-        let low = low + 1
-        let high = high - 1
-      endif
-    endwhile
-
-    " If the right index has not reached the left side of data must now sort
-    "   the left partition.
-    if a:start < high
-      call s:SortR(a:start, high, a:cmp, a:direction)
+function! SelectBuf_Start()
+  if s:myBufNum == -1
+    if exists("s:userDefinedHideBufNums")
+      unlet s:userDefinedHideBufNums
+    else
+      let s:hideBufNums = 1
     endif
-
-    " If the left index has not reached the right side of data must now sort
-    "   the right partition.
-    if low < a:end
-      call s:SortR(low, a:end, a:cmp, a:direction)
-    endif
+    let s:myBufNum = bufnr('%')
   endif
+  call SelectBuf_Refresh()
 endfunction
 
-"---
-" To Sort a range of lines, pass the range to Sort() along with the name of a
-" function that will compare two lines.
-"
-function! s:Sort(cmp,direction) range
-  call s:SortR(a:firstline, a:lastline, a:cmp, a:direction)
 
+" Called by WinManager for BufEnter event.
+" Return invalid only when there are pending updates.
+function! SelectBuf_IsValid()
+  return s:delayedDynUpdate || (s:pendingUpdAxns == "")
 endfunction
+
+
+function! SelectBuf_Refresh()
+  let s:opMode = 'WinManager'
+  call s:ListBufs()
+endfunction
+
+
+function! SelectBuf_ReSize()
+  call s:AdjustWindowSize()
+endfunction
+
+""" END: WinManager hooks. }}}
+
+" Restore cpo.
+let &cpo = s:save_cpo
+unlet s:save_cpo
+
+" vim6:fdm=marker sw=2
