@@ -4,7 +4,7 @@
 " Last Change: 15-Oct-2001 @ 19:27
 " Requires: Vim-6.0 or higher, lightWeightArray.vim(1.0.1),
 "           bufNwinUtils.vim(1.0.1)
-" Version: 2.1.2
+" Version: 2.1.3
 "
 "  Source this file and press <F3> to get the list of buffers.
 "  Move the cursor on to the buffer that you need to select and press <CR> or
@@ -95,6 +95,16 @@ if exists("g:selBufAlwaysShowDetails")
   let s:showDetails = g:selBufAlwaysShowDetails
 else
   let s:showDetails = 0
+endif
+
+"
+" If the directory buffers should be hidden from the list.
+" The default is to NOT to hide directory buffers.
+"
+if exists("g:selBufAlwaysShowDirectories")
+  let s:showDirectories = g:selBufAlwaysShowDirectories
+else
+  let s:showDirectories = 1
 endif
 
 "
@@ -196,10 +206,10 @@ function! s:SelBufUpdateBuffer()
     let helpMsg = helpMsg
       \ . "\" <Enter> or Left-double-click : open current buffer\n"
       \ . "\" <C-W><Enter> : open buffer in a new window\n"
-      \ . "\" d : delete current buffer\t\tD : wipeout current buffer\n"
+      \ . "\" d : delete/undelete current buffer\tD : wipeout current buffer\n"
       \ . "\" i : toggle additional details\t\tp : toggle line wrapping\n"
-      \ . "\" r : refresh browser\t\t\tu : toggle hidden buffers\n"
-      \ . "\" q or <F3> : close browser\n"
+      \ . "\" c : toggle directory buffers\t\tu : toggle hidden buffers\n"
+      \ . "\" r : refresh browser\t\t\tq or <F3> : close browser\n"
       \ . "\" Next, Previous & Current buffers are marked 'a', 'b' & 'c' "
         \ . "respectively\n"
       \ . "\" Press ? to hide help\n"
@@ -207,6 +217,10 @@ function! s:SelBufUpdateBuffer()
     let helpMsg = helpMsg
       \ . "\" Press ? to show help\n"
   endif
+  let helpMsg = helpMsg . "\"= " . "showDetails=" . s:showDetails
+              \ . ",showHidden=" . s:showHidden . ",showDirectories="
+              \ . s:showDirectories . ",wrapLines=" . s:wrapLines
+              \ . "\n"
   let helpMsg = helpMsg . "Buffer\t\tFile"
   put! =helpMsg
   $
@@ -222,10 +236,17 @@ function! s:SelBufUpdateBuffer()
   while i <= bufnr("$")
     let newLine = ""
     let showBuffer = 0
+
+    " If user wants to hide hidden buffers.
     if s:showHidden && bufexists(i)
       let showBuffer = 1
     elseif ! s:showHidden && buflisted(i)
       let showBuffer = 1
+    endif
+
+    " If user wants to hide directory buffers.
+    if ! s:showDirectories && isdirectory(bufname(i))
+      let showBuffer = 0
     endif
 
     if showBuffer
@@ -316,10 +337,8 @@ endfunction
 
 
 function! s:SelBufSelectCurrentBuffer(openInNewWindow)
-  normal! 0yw
-  let s:selectedBufferNumber = @"
-  " if @" =~ "Buffer"
-  if line(".") <= s:headerSize
+  let s:selectedBufferNumber = s:SelBufGetBufferNumber()
+  if s:selectedBufferNumber == -1
     +
     return
   endif
@@ -349,20 +368,33 @@ endfunction
 function! s:SelBufDeleteCurrentBuffer(wipeout)
   let saveReport = &report
   let &report = 10000
-  normal! 0yw
-  if line(".") <= s:headerSize
+  let s:selectedBufferNumber = s:SelBufGetBufferNumber()
+  if s:selectedBufferNumber == -1
     +
     return
   endif
+  let deleteLine = 0
   if a:wipeout
-    exec "bwipeout" @"
+    exec "bwipeout" s:selectedBufferNumber
+    echo "Buffer " . s:selectedBufferNumber . " wiped out."
+    let deleteLine = 1
+  elseif buflisted(s:selectedBufferNumber)
+    exec "bdelete" s:selectedBufferNumber
+    echo "Buffer " . s:selectedBufferNumber . " deleted."
+    if ! s:showHidden
+      let deleteLine = 1
+    endif
   else
-    exec "bdelete" @"
+    " Undelete buffer.
+    call setbufvar(s:selectedBufferNumber, "&buflisted", "1")
+    echo "Buffer " . s:selectedBufferNumber . " undeleted."
   endif
-  set modifiable
-  delete
-  set nomodifiable
-  set nomodified
+  if deleteLine
+    set modifiable
+    delete
+    set nomodifiable
+    set nomodified
+  endif
   let &report = saveReport
 endfunction
 
@@ -395,6 +427,7 @@ function! s:SelBufSetupBuf()
   syn match Special +^"[^:]* [:]+
   syn match Special +\t[^:]* [:]+
   syn match Comment +^"[^:]*$+
+  syn match Statement "^\"= .*$"
   noremap <buffer> <silent> <CR> :call <SID>SelBufSelectCurrentBuffer(0)<CR>
   noremap <buffer> <silent> <2-LeftMouse> :call <SID>SelBufSelectCurrentBuffer(0)<CR>
   noremap <buffer> <silent> <C-W><CR> :call <SID>SelBufSelectCurrentBuffer(1)<CR>
@@ -402,6 +435,7 @@ function! s:SelBufSetupBuf()
   noremap <buffer> <silent> D :call <SID>SelBufDeleteCurrentBuffer(1)<CR>
   noremap <buffer> <silent> i :call <SID>SelBufToggleDetails()<CR>
   noremap <buffer> <silent> u :call <SID>SelBufToggleHidden()<CR>
+  noremap <buffer> <silent> c :call <SID>SelBufToggleDirectories()<CR>
   noremap <buffer> <silent> p :call <SID>SelBufToggleWrap()<CR>
   noremap <buffer> <silent> r :call <SID>SelBufUpdateBuffer()<CR>
   noremap <buffer> <silent> ? :call <SID>SelBufToggleHelpHeader()<CR>
@@ -415,7 +449,8 @@ function! s:SelBufSetupBuf()
   " Define some local command too for convenience and for easy debugging.
   command! -nargs=0 -buffer S :call <SID>SelBufSelectCurrentBuffer(0)
   command! -nargs=0 -buffer SS :call <SID>SelBufSelectCurrentBuffer(1)
-  command! -nargs=0 -buffer D :call <SID>SelBufDeleteCurrentBuffer()
+  command! -nargs=0 -buffer D :call <SID>SelBufDeleteCurrentBuffer(0)
+  command! -nargs=0 -buffer DD :call <SID>SelBufDeleteCurrentBuffer(1)
 endfunction
 
 
@@ -437,9 +472,17 @@ function! s:SelBufToggleHidden()
 endfunction
 
 
+function! s:SelBufToggleDirectories()
+  let s:showDirectories = ! s:showDirectories
+  call s:SelBufUpdateBuffer()
+endfunction
+
+
 function! s:SelBufToggleWrap()
   let &l:wrap = ! &l:wrap
   let s:wrapLines = &l:wrap
+  " To update the help header, at least.
+  call s:SelBufUpdateBuffer()
 endfunction
 
 
@@ -472,4 +515,15 @@ function! s:SelBufHACKNoModifiableProblem()
   " FIXME: Why do I have to do this ??? Otherwise, the selected buffer or those
   "  that are created by using "file" command become nomodifiable.
   set modifiable
+endfunction
+
+
+function! s:SelBufGetBufferNumber()
+  normal! 0yw
+  let bufNumber = substitute(@", '\s\+', '', 'g')
+  if line(".") <= s:headerSize || match(bufNumber, '\d\+') == -1
+    return -1
+  endif
+  " Convert it to number type.
+  return bufNumber + 0
 endfunction
