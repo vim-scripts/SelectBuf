@@ -1,10 +1,9 @@
-"
 " selectbuf.vim -- lets you select a buffer visually.
 " Author: Hari Krishna <hari_vim@yahoo.com>
-" Last Change: 15-Oct-2001 @ 19:27
+" Last Change: 26-Oct-2001 @ 12:04
 " Requires: Vim-6.0 or higher, lightWeightArray.vim(1.0.1),
 "           bufNwinUtils.vim(1.0.1)
-" Version: 2.1.3
+" Version: 2.1.6
 "
 "  Source this file and press <F3> to get the list of buffers.
 "  Move the cursor on to the buffer that you need to select and press <CR> or
@@ -128,6 +127,47 @@ endif
 let s:originalBuffer = 1
 " Store the header size.
 let s:headerSize = 0
+" characters that must be escaped for a regular expression
+let s:escregexp = '/*^$.~\'
+let s:savePositionInSort = 1
+
+let s:sortByNumber=0
+let s:sortByName=1
+let s:sortByType=2
+let s:sortByIndicators=3
+let s:sortByMaxVal=3
+
+let s:sortdirlabel  = ""
+let s:sorttype = 0
+let s:sortdirection = 1
+
+function! s:SelBufGetSortTypeLabel(sorttype)
+  if a:sorttype == 0
+    return "number"
+  elseif a:sorttype == 1
+    return "name"
+  elseif a:sorttype == 2
+    return "type"
+  elseif a:sorttype == 3
+    return "indicators"
+  else
+    return ""
+  endif
+endfunction
+
+function! s:SelBufGetSortTypeCmd(sorttype)
+  if a:sorttype == 0
+    return "s:SelBufCmpByNumber"
+  elseif a:sorttype == 1
+    return "s:SelBufCmpByName"
+  elseif a:sorttype == 2
+    return "s:SelBufCmpByType"
+  elseif a:sorttype == 3
+    return "s:SelBufCmpByIndicators"
+  else
+    return ""
+  endif
+endfunction
 
 
 "
@@ -147,6 +187,8 @@ endif
 " The main plug-in mapping.
 nmap <script> <silent> <Plug>SelectBuf :call <SID>SelBufListBufs()<CR>
 
+" Deleting autocommands first is a good idea especially if we want to reload
+"   the script without restarting vim.
 aug SelectBuf
   au!
   exec "au BufWinEnter " . g:selBufWindowName .
@@ -193,13 +235,9 @@ function! s:SelBufListBufs()
 endfunction
 
 
-function! s:SelBufUpdateBuffer()
-  call s:SelBufSetupBuf()
-  let savedReport = &report
-  let &report = 10000
-  set modifiable
-  " Delete the contents (if any) first.
-  0,$d
+function! s:SelBufUpdateHeader()
+  0
+  silent! 1,/^"=/delete
 
   let helpMsg=""
   if s:showHelp
@@ -209,7 +247,8 @@ function! s:SelBufUpdateBuffer()
       \ . "\" d : delete/undelete current buffer\tD : wipeout current buffer\n"
       \ . "\" i : toggle additional details\t\tp : toggle line wrapping\n"
       \ . "\" c : toggle directory buffers\t\tu : toggle hidden buffers\n"
-      \ . "\" r : refresh browser\t\t\tq or <F3> : close browser\n"
+      \ . "\" R : refresh browser\t\t\tq or <F3> : close browser\n"
+      \ . "\" s/S : select sort field for/backward\tr : reverse sort\n"
       \ . "\" Next, Previous & Current buffers are marked 'a', 'b' & 'c' "
         \ . "respectively\n"
       \ . "\" Press ? to hide help\n"
@@ -217,17 +256,47 @@ function! s:SelBufUpdateBuffer()
     let helpMsg = helpMsg
       \ . "\" Press ? to show help\n"
   endif
-  let helpMsg = helpMsg . "\"= " . "showDetails=" . s:showDetails
-              \ . ",showHidden=" . s:showHidden . ",showDirectories="
-              \ . s:showDirectories . ",wrapLines=" . s:wrapLines
-              \ . "\n"
-  let helpMsg = helpMsg . "Buffer\t\tFile"
+  let helpMsg = helpMsg . "\"=" . " Sorting=" . s:sortdirlabel .
+              \ s:SelBufGetSortTypeLabel(s:sorttype) .
+              \ ",showDetails=" . s:showDetails .
+              \ ",showHidden=" . s:showHidden . ",showDirs=" .
+              \ s:showDirectories . ",wrapLines=" . s:wrapLines .
+              \ "\n"
+    "\.w:sorttype.b:suffixeslast.b:filtering."\n"
+  0
   put! =helpMsg
-  $
-  $d " Excess empty line.
-  $
-  normal! mt
 
+  " Delete any empty lines.
+  %g/^$/d
+
+  " This works from here as this method is the last one called anytime (because
+  "   of sort).
+  " Set the window size to one more than just required.
+  normal! 1G
+  if NumberOfWindows() != 1
+    exec "resize" . (line("$") + 1)
+    "silent! exec "normal! \<C-W>_"
+  endif
+
+  " Mark the end of the header.
+  0
+  /^"=
+  normal! mt
+endfunction
+
+
+function! s:SelBufUpdateBuffer()
+  call s:SelBufSetupBuf()
+  let savedReport = &report
+  let &report = 10000
+  setlocal modifiable
+  " Delete the contents (if any) first.
+  0,$delete
+
+  " This will anyway be called from the sort, but it doesn't hurt.
+  call s:SelBufUpdateHeader()
+
+  $
   let s:headerSize = line("$")
 
   " Loop over all the buffers.
@@ -320,19 +389,23 @@ function! s:SelBufUpdateBuffer()
     endif
   endif
   let &report = savedReport
-  set nomodified
-  set nomodifiable
-  " Just set the window size to one more than just required.
-  normal! 1G
-  if NumberOfWindows() != 1
-    exec "resize" . (line("$") + 1)
-    "silent! exec "normal! \<C-W>_"
-  endif
+  " This is not needed because of the buftype setting.
+  "set nomodified
+  setlocal nomodifiable
+
   " Move to the start
-  if line("'t") != 0
+  if line("'t") != 0 && line("'t") < line("$")
     " FIXME: For some reason, this doesn't always work.
     normal! 't
+  else
+    0
   endif
+
+  " Finally sort the listing based on the current settings.
+  let _savePositionInSort = s:savePositionInSort
+  let s:savePositionInSort = 0
+  call s:SortSelect(0)
+  let s:savePositionInSort = _savePositionInSort
 endfunction
 
 
@@ -390,10 +463,11 @@ function! s:SelBufDeleteCurrentBuffer(wipeout)
     echo "Buffer " . s:selectedBufferNumber . " undeleted."
   endif
   if deleteLine
-    set modifiable
+    setlocal modifiable
     delete
-    set nomodifiable
-    set nomodified
+    setlocal nomodifiable
+    " This is not needed because of the buftype setting.
+    "set nomodified
   endif
   let &report = saveReport
 endfunction
@@ -410,8 +484,12 @@ endfunction
 
 
 function! s:SelBufSetupBuf()
-  set noswapfile
+  " We don't need to set this as the buftype setting below takes care of it.
+  "set noswapfile
   set nobuflisted
+  setlocal buftype=nofile
+  " Just in case, this will make sure we are always hidden.
+  setlocal bufhidden=delete
   if s:wrapLines
     setlocal wrap
   else
@@ -428,29 +506,35 @@ function! s:SelBufSetupBuf()
   syn match Special +\t[^:]* [:]+
   syn match Comment +^"[^:]*$+
   syn match Statement "^\"= .*$"
-  noremap <buffer> <silent> <CR> :call <SID>SelBufSelectCurrentBuffer(0)<CR>
-  noremap <buffer> <silent> <2-LeftMouse> :call <SID>SelBufSelectCurrentBuffer(0)<CR>
-  noremap <buffer> <silent> <C-W><CR> :call <SID>SelBufSelectCurrentBuffer(1)<CR>
-  noremap <buffer> <silent> d :call <SID>SelBufDeleteCurrentBuffer(0)<CR>
-  noremap <buffer> <silent> D :call <SID>SelBufDeleteCurrentBuffer(1)<CR>
-  noremap <buffer> <silent> i :call <SID>SelBufToggleDetails()<CR>
-  noremap <buffer> <silent> u :call <SID>SelBufToggleHidden()<CR>
-  noremap <buffer> <silent> c :call <SID>SelBufToggleDirectories()<CR>
-  noremap <buffer> <silent> p :call <SID>SelBufToggleWrap()<CR>
-  noremap <buffer> <silent> r :call <SID>SelBufUpdateBuffer()<CR>
-  noremap <buffer> <silent> ? :call <SID>SelBufToggleHelpHeader()<CR>
-  cabbr <buffer> <silent> w :
-  cabbr <buffer> <silent> wq q
-  " FIXME: How can I know what was the original activation key, so that I can
-  "  toggle it to mean "Close"? Use F3 for now.
-  noremap <buffer> <silent> <F3> :call <SID>SelBufQuit()<CR>
-  noremap <buffer> <silent> q :call <SID>SelBufQuit()<CR>
+  nnoremap <buffer> <silent> <CR> :call <SID>SelBufSelectCurrentBuffer(0)<CR>
+  nnoremap <buffer> <silent> <2-LeftMouse> :call <SID>SelBufSelectCurrentBuffer(0)<CR>
+  nnoremap <buffer> <silent> <C-W><CR> :call <SID>SelBufSelectCurrentBuffer(1)<CR>
+  nnoremap <buffer> <silent> d :call <SID>SelBufDeleteCurrentBuffer(0)<CR>
+  nnoremap <buffer> <silent> D :call <SID>SelBufDeleteCurrentBuffer(1)<CR>
+  nnoremap <buffer> <silent> i :call <SID>SelBufToggleDetails()<CR>
+  nnoremap <buffer> <silent> u :call <SID>SelBufToggleHidden()<CR>
+  nnoremap <buffer> <silent> c :call <SID>SelBufToggleDirectories()<CR>
+  nnoremap <buffer> <silent> p :call <SID>SelBufToggleWrap()<CR>
+  nnoremap <buffer> <silent> R :call <SID>SelBufUpdateBuffer()<CR>
+  nnoremap <buffer> <silent> s :call <SID>SortSelect(1)<cr>
+  nnoremap <buffer> <silent> S :call <SID>SortSelect(-1)<cr>
+  nnoremap <buffer> <silent> r :call <SID>SortReverse()<cr>
+  nnoremap <buffer> <silent> ? :call <SID>SelBufToggleHelpHeader()<CR>
+  nnoremap <buffer> <silent> q :call <SID>SelBufQuit()<CR>
+  " This is not needed because of the buftype setting.
+  "cabbr <buffer> <silent> w :
+  "cabbr <buffer> <silent> wq q
+  " Toggle the same key to mean "Close".
+  nnoremap <buffer> <silent> <Plug>SelectBuf :call <SID>SelBufQuit()<CR>
 
-  " Define some local command too for convenience and for easy debugging.
-  command! -nargs=0 -buffer S :call <SID>SelBufSelectCurrentBuffer(0)
-  command! -nargs=0 -buffer SS :call <SID>SelBufSelectCurrentBuffer(1)
+  " Define some local command too for ease of debugging.
+  command! -nargs=0 -buffer SB :call <SID>SelBufSelectCurrentBuffer(0)
+  command! -nargs=0 -buffer SBS :call <SID>SelBufSelectCurrentBuffer(1)
   command! -nargs=0 -buffer D :call <SID>SelBufDeleteCurrentBuffer(0)
   command! -nargs=0 -buffer DD :call <SID>SelBufDeleteCurrentBuffer(1)
+  command! -nargs=0 -buffer SS :call <SID>SortSelect(1)
+  command! -nargs=0 -buffer SSR :call <SID>SortSelect(-1)
+  command! -nargs=0 -buffer SR :call <SID>SortReverse()
 endfunction
 
 
@@ -488,7 +572,6 @@ endfunction
 
 function! s:SelBufDone()
   call s:SelBufHACKSearchString()
-  call s:SelBufHACKNoModifiableProblem()
 
   " If user wants this buffer be removed...
   if g:selBufRemoveBrowserBuffer
@@ -511,13 +594,6 @@ function! s:SelBufHACKSearchString()
 endfunction
 
 
-function! s:SelBufHACKNoModifiableProblem()
-  " FIXME: Why do I have to do this ??? Otherwise, the selected buffer or those
-  "  that are created by using "file" command become nomodifiable.
-  set modifiable
-endfunction
-
-
 function! s:SelBufGetBufferNumber()
   normal! 0yw
   let bufNumber = substitute(@", '\s\+', '', 'g')
@@ -526,4 +602,229 @@ function! s:SelBufGetBufferNumber()
   endif
   " Convert it to number type.
   return bufNumber + 0
+endfunction
+
+"""
+""" Support for sorting...from explorer.vim (2.5)
+""" Minimize the changes necessary, to make future merges easier.
+"""
+
+""
+"" Compare methods added.
+""
+
+function! s:SelBufCmpByName(line1, line2, direction)
+  let name1 = substitute(a:line1, '^.*\t', '', '')
+  let name2 = substitute(a:line2, '^.*\t', '', '')
+  if name1 < name2
+    return -a:direction
+  elseif name1 > name2
+    return a:direction
+  else
+    return 0
+  endif
+endfunction
+
+function! s:SelBufCmpByNumber(line1, line2, direction)
+  let num1 = substitute(a:line1, '\t.*$', '', '') + 0
+  let num2 = substitute(a:line2, '\t.*$', '', '') + 0
+  if num1 < num2
+    return -a:direction
+  elseif num1 > num2
+    return a:direction
+  else
+    return 0
+  endif
+endfunction
+
+function! s:SelBufCmpByType(line1, line2, direction)
+  " Establish the extensions.
+  let type1 = substitute(a:line1, '^.*\.\([^.]*\)', '\1', '')
+  let type2 = substitute(a:line2, '^.*\.\([^.]*\)', '\1', '')
+
+  " If line1 doesn't have an extension
+  if type1 == a:line1
+    if type2 == a:line2
+      return 0
+    else
+      return a:direction
+    endif
+  endif
+
+  " If line2 doesn't have an extension
+  if type2 == a:line2
+    if type1 == a:line1
+      return 0
+    else
+      return -a:direction
+    endif
+  endif
+
+  if type1 < type2
+    return -a:direction
+  elseif type1 > type2
+    return a:direction
+  else
+    return 0
+  endif
+endfunction
+
+function! s:SelBufCmpByIndicators(line1, line2, direction)
+  let ind1 = substitute(a:line1, '^\d\+\t\+\([^\t]\+\)\t\+.*$', '\1', '')
+  let ind2 = substitute(a:line2, '^\d\+\t\+\([^\t]\+\)\t\+.*$', '\1', '')
+  if ind1 < ind2
+    return -a:direction
+  elseif ind1 > ind2
+    return a:direction
+  else
+    return 0
+  endif
+endfunction
+
+
+"
+" Interface to sort.
+"
+
+"---
+" Reverse the current sort order
+"
+function! s:SortReverse()
+  if exists("s:sortdirection") && s:sortdirection == -1
+    let s:sortdirection = 1
+    let s:sortdirlabel  = ""
+  else
+    let s:sortdirection = -1
+    let s:sortdirlabel  = "rev-"
+  endif
+  call s:SortListing("")
+endfunction
+
+"---
+" Toggle through the different sort orders
+"
+function! s:SortSelect(inc)
+  " Select the next sort option
+  if exists("s:sorttype")
+    let s:sorttype=s:sorttype + a:inc
+
+    " Wrap the sort type.
+    if s:sorttype > s:sortByMaxVal
+      let s:sorttype = 0
+    elseif s:sorttype < 0
+      let s:sorttype = s:sortByMaxVal
+    endif
+  endif
+  call s:SortListing("")
+endfunction
+
+"---
+" Sort the file listing
+"
+function! s:SortListing(msg)
+    " Save the line we start on so we can go back there when done
+    " sorting
+    if s:savePositionInSort
+      let startline = getline(".")
+      let col=col(".")
+      let lin=line(".")
+    endif
+
+    " Allow modification
+    setlocal modifiable
+
+    " Send a message about what we're doing
+    " Don't really need this - it can cause hit return prompts
+"   echo a:msg . "Sorting by" . w:sortdirlabel . w:sorttype
+
+    " Create a regular expression out of the suffixes option in case
+    " we need it.
+    "call s:SetSuffixesLast()
+
+    " Remove section separators
+    "call s:RemoveSeparators()
+
+    " Do the sort
+    0
+    silent! /^"=/+1,$call s:Sort(s:SelBufGetSortTypeCmd(s:sorttype),
+      \ s:sortdirection)
+
+    " Replace the header with updated information
+    call s:SelBufUpdateHeader()
+
+    " Restore section separators
+    "call s:AddSeparators()
+
+    " Return to the position we started on
+    if s:savePositionInSort
+      0
+      if search('\m^'.escape(startline,s:escregexp),'W') <= 0
+        execute lin
+      endif
+      execute "normal!" col . "|"
+    endif
+
+    " Disallow modification
+    " This is not needed because of the buftype setting.
+    "setlocal nomodified
+    setlocal nomodifiable
+
+endfunction
+
+""
+"" Sort infrastructure.
+""
+
+
+"---
+" Sort lines.  SortR() is called recursively.
+"
+function! s:SortR(start, end, cmp, direction)
+
+  " Bottom of the recursion if start reaches end
+  if a:start >= a:end
+    return
+  endif
+  "
+  let partition = a:start - 1
+  let middle = partition
+  let partStr = getline((a:start + a:end) / 2)
+  let i = a:start
+  while (i <= a:end)
+    let str = getline(i)
+    exec "let result = " . a:cmp . "(str, partStr, " . a:direction . ")"
+    if result <= 0
+      " Need to put it before the partition.  Swap lines i and partition.
+      let partition = partition + 1
+      if result == 0
+        let middle = partition
+      endif
+      if i != partition
+        let str2 = getline(partition)
+        call setline(i, str2)
+        call setline(partition, str)
+      endif
+    endif
+    let i = i + 1
+  endwhile
+
+  " Now we have a pointer to the "middle" element, as far as partitioning
+  " goes, which could be anywhere before the partition.  Make sure it is at
+  " the end of the partition.
+  if middle != partition
+    let str = getline(middle)
+    let str2 = getline(partition)
+    call setline(middle, str2)
+    call setline(partition, str)
+  endif
+  call s:SortR(a:start, partition - 1, a:cmp,a:direction)
+  call s:SortR(partition + 1, a:end, a:cmp,a:direction)
+endfunction
+
+"---
+" To Sort a range of lines, pass the range to Sort() along with the name of a
+" function that will compare two lines.
+"
+function! s:Sort(cmp,direction) range
+  call s:SortR(a:firstline, a:lastline, a:cmp, a:direction)
 endfunction
