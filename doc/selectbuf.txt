@@ -1,9 +1,9 @@
 *selectbuf.txt* A fast and feature rich buffer explorer.
                     Requires Vim 6.0
-            Last Change: 07-Apr-2003 @ 09:49PM
+            Last Change: 16-Mar-2004 @ 19:40
           Since Version: 3.0
-               Revision: 1.1.2
-         Plugin Version: 3.1
+               Revision: 1.2.3
+         Plugin Version: 3.2
                  Author: Hari Krishna Dara (hari_vim at yahoo dot com)
 
                                             *selectbuf-introduction*
@@ -29,7 +29,16 @@ OVERVIEW                                    *selectbuf-overview*
 
 |selectbuf-settings|        An explanation of how to configure the plugin.
 
-|selectbuf-changes|         A change list for version 3.0 from previous version.
+|selectbuf-filetype|        Making use of the "selectbuf" filetype and
+                            configuring the syntax coloring in the browser
+                            window.
+
+|selectbuf-deprecations|    A list of deprecated features.
+
+|perforce-limitations|      Current limitations of the plugin.
+
+|selectbuf-changes|         A change list for current version from the previous
+                            versions.
 
 |selectbuf-known-issues|    A list of known issues.
 
@@ -62,7 +71,7 @@ If you obtained the plugin as a zip archive,
 <
       This should generate the help tags for the selectbuf plugin help.
 
-Later, if you need to temprarily disable the plugin without needing to remove
+Later, if you need to temporarily disable the plugin without needing to remove
 the file or move it into a different directory, you can set the loaded_selectbuf
 variable in your vimrc. You can also set the no_selectbuf_maps to disable just
 the mappings defined in this plugin or no_plugin_maps to disable mappings in all
@@ -150,6 +159,7 @@ Here is a brief list of important features:
       as sorting, MRU access to buffers, syntax coloring, help header and
       more. There are more ways that you can sort and the sorting is also
       faster too.
+    - Some limited extensibility through the "selectbuf" filetype.
 ==============================================================================
 
                                             *selectbuf-mappings*
@@ -177,39 +187,67 @@ to obtain the lhs of a mapping).
                                 *SelBufTBufNumsKey*      *SelBufTDetailsKey*
                                 *SelBufTHelpKey*         *SelBufTHiddenKey*
                                 *SelBufTHidePathsKey*    *SelBufWipeOutKey*
-                                *SelBufWSelectKey*
+                                *SelBufWSelectKey*       *SelBufLaunchKey*
 
 
-Here is a table of all the mappings and their default key associations:
+Here is a table of all the mappings and their default key associations (with the
+corresponding buffer local command name in parenthesis):
 
     Mapping               Default       Description~
-    SelBufDeleteKey       d             Delete/Undelete current buffer
-                                        (list/unlist). See |:delete|
+    SelBufSelectKey       <CR>          Open buffer in the previous window
+                                        (which could be the current window
+                                        itself if |selBufBrowserMode| is
+                                        "switch"). (SBSelect)
     SelBufMSelectKey      <2-LeftMouse> Same as SelBufSelectKey, but using
                                         mouse. The default is to double click
                                         the item but you can change it to say
                                         <RightMouse> if it is more convenient.
                                         In fact there is nothing to prevent you
-                                        from assigning a key to this instead of
-                                        a mouse click.
+                                        from assigning another key to this
+                                        instead of a mouse click. (SBSelect)
     SelBufOpenKey         O             Same as SelBufSelectKey, but keep
-                                        browser open.
+                                        browser open. (SBOpen)
+    SelBufWSelectKey      <C-W><CR>     Split open the current buffer.
+                                        (SBWSelect)
     SelBufQuitKey         q             Quit browser. Under WinManager, this
                                         just moves the cursor back to the
-                                        previous window.
-    SelBufRefreshKey      R             Refresh browser.
-    SelBufSelectKey       <CR>          Open buffer in the previous window.
-    SelBufShowSummaryKey  <C-G>         Shows summary of the current buffer.
-    SelBufWSelectKey      <C-W><CR>     Split open the current buffer.
-    SelBufSortRevKey      r             Reverse the sort direction.
-    SelBufSortSelectBKey  S             Select previous sort field.
-    SelBufSortSelectFKey  s             Select next sort field.
-    SelBufTBufNumsKey     p             Toggle showing buffer numbers.
-    SelBufTDetailsKey     i             Toggle showing details.
-    SelBufTHelpKey        ?             Toggle showing help header.
-    SelBufTHiddenKey      u             Toggle showing unlisted buffers.
-    SelBufTHidePathsKey   P             Toggle showing full path.
+                                        previous window. (SBQuit)
+    SelBufDeleteKey       d             Delete/Undelete current buffer
+                                        (list/unlist), see |:delete| and
+                                        'buflisted'. Works on visual selections
+                                        too. See also |selectbuf-multiselect|.
+                                        (SBDelete)
     SelBufWipeOutKey      D             |:wipeout| current buffer.
+                                        Works on visual selections too. See also
+                                        |selectbuf-multiselect|. (SBWipeout)
+    SelBufRefreshKey      R             Refresh browser. (SBRefresh)
+    SelBufShowSummaryKey  <C-G>         Shows summary of the current buffer.
+                                        (SBSummary)
+    SelBufSortSelectFKey  s             Select next sort field. (SBFSort)
+    SelBufSortSelectBKey  S             Select previous sort field. (SBBSort)
+    SelBufSortRevKey      r             Reverse the sort direction. (SBRSort)
+    SelBufLaunchKey       A             Launch the current buffer with in an
+                                        external program. On windows, this by
+                                        default invokes the program that is
+                                        associated based on the extension of the
+                                        file (the Explorer File Associations).
+                                        On non-windows platform, you will have
+                                        to configure |selBufLauncher| to launch
+                                        the right program yourself. Most useful
+                                        for viewing html files. Also see,
+                                        |SBLaunch|. (SBLaunch)
+    SelBufTBufNumsKey     p             Toggle showing buffer numbers.
+                                        (SBTBufNums)
+    SelBufTDetailsKey     i             Toggle showing details. (SBTDetails)
+    SelBufTHelpKey        ?             Toggle showing help header. (SBTHelp)
+    SelBufTHiddenKey      u             Toggle showing unlisted buffers.
+                                        (SBTHidden)
+    SelBufTHidePathsKey   P             Toggle showing full path. (SBTPaths)
+
+
+Note that indicators or path should currently be displayed to be able to sort by
+that criteria. To be able to sort by MRU, the |selBufDisableMRUlisting| should
+not have been enabled.
 
 Note that SelBufDeleteKey only sets/clears the 'buflisted' option, to completely
 remove a buffer from the current Vim session, use SelBufWipeOutKey.  Deleting a
@@ -255,6 +293,28 @@ SBInitialize    This command reinitializes the plugin and imports any changes
                 or any other command that results in a re-initialization of
                 the plugin (like |SBSettings|).
 
+                                            *SBLaunch*
+This is a global command that can open the current buffer (with no arguments),
+or a specified buffer (by path or buffer number)/file (by path) in an external
+program. On MS Windows, this automatically uses the Explorer File Types and uses
+the correct program that is associated with the file by its extension (which
+means, it opens your default browser for an HTML file), but for other systems,
+you need to configure |selBufLauncher| setting for this to work.
+
+When in the browser window, the command with no arguments defaults to the buffer
+under the cursor.
+
+Note that on windows, if you need to configure |selBufLauncher| setting, then it
+is recommended that you prefix the commands with "start" such that you will not
+end up seeing a dos window hanging around until you quit the external program.
+
+On Windows, using the default launcher command, you can even start applications
+(such as another gvim instance) using this command. If the application is not in
+the path, you may have to specify the path to the application.
+>
+        :SBLauch gvim
+<
+
                                             *SBBufToHead*
                                             *SBBufToTail*
 These commands can be used to move a buffer to the head or to the tail in the
@@ -270,6 +330,57 @@ MRU): >
 
         :SBBufToHead 10
 <
+                                            *SBExec*
+This command allows you to execute any built-in or user-defined command that
+takes in a list of buffer/file names over a selected block of buffers in the
+browser window. All that you need to do is first create a selection by using
+mouse or keyboard and execute :SBExec with the ex-mode command (and its
+arguments) that you would like to execute on them (the command should accept a
+buffer/file name). E.g., you can sort the list by filetype and select all the
+java files and execute the following command on them:
+>
+        :SBExec next
+<
+This results in Vim setting |:args| to the set of java files (you can then use
+|:argdo| and related commands to manipulate the buffers as a set).
+
+You can also execute any external command on the selected buffers by prefixing
+it with a bang (|:!|). E.g., you can permanently remove the selected files from
+the filesystem by using the following command:
+>
+    :SBExec !rm
+<
+In this case, you would of course want to create a custom command which would
+first confirm before executing the external rm command (see
+|selectbuf-extend-examples|).
+
+You can also execute the user-defined commands that the plugins add (such as a
+source control plugin) on the buffer. E.g., to execute perforce checkout command
+on a set of files:
+>
+    :SBExec PE
+<
+See |selectbuf-extend| for ways to create a new mapping or custom command for
+the above.
+
+If you specify string "%s" in the command, it is replaced with the buffer names
+before executing the command and otherwise, the buffer names are appended at the
+end of the command. You can also specify "%b" to replace with the buffer numbers
+instead of the buffer names, for those ex commands that understand only buffer
+numbers. Don't use "%n" if you are executing an external command, as the
+external command will not understand the Vim buffer numbers. To pass in "%"
+itself, escape it by prefixing with another "%".
+
+Note: Currently only "s" and "n" following a "%" have special meaning, so other
+characters following "%" will get through without any processing, but some of
+these characters might acquire special meaning in the future, so if your
+intention is to pass "%" as part of the command, always prefix it with another
+"%".
+
+See |selectbuf-extend| for a way to create shortcuts to execute such commands.
+
+To select buffers that are non-adjacent to each other, see
+|selectbuf-multiselect|.
 ==============================================================================
 
                                             *selectbuf-settings*
@@ -292,9 +403,10 @@ vertically split left window. >
                         *selBufDefaultSortDirection*  *selBufDefaultSortOrder*
                         *selBufDelayedDynUpdate*      *selBufDisableMRUlisting*
                         *selBufDisableSummary*        *selBufEnableDynUpdate*
-                        *selBufHighlightOnlyFilename* *selBufIgnoreNonFileBufs*
+                        *selBufIgnoreCaseInSort*      *selBufIgnoreNonFileBufs*
                         *selBufRestoreWindowSizes*    *selBufSplitType*
                         *selBufUseVerticalSplit*      *selBufDoFileOnClose*
+                        *selBufDisplayMaxPath*        *selBufLauncher*
 
 Here is a table that describes the names of the global variables with their
 defaults.
@@ -331,10 +443,15 @@ defaults.
                                         you can always toggle this using the
                                         |SelBufTHiddenKey|, irrespective of
                                         this setting.
-    selBufAlwaysShowPaths       0       The plugin by default hides the full
+    selBufAlwaysShowPaths       2       When 0, the plugin hides the full
                                         path names of the buffers, but if you
                                         always want them to be shown, set this
-                                        to 1. Note that you can always toggle
+                                        to 1 or 2. Setting it to 2 will make the
+                                        plugin split the path component separate
+                                        from the filename (gives the best of
+                                        both 0 and 1). Also see,
+                                        |selBufDisplayMaxPath| setting.
+                                        Note that you can always toggle
                                         this using the |SelBufTHidePathsKey|,
                                         irrespective of this setting.
     selBufBrowserMode           split   The mode of operation for browser. In
@@ -400,10 +517,9 @@ defaults.
                                         list every time, but if you want to
                                         disable this feature, then set this to
                                         0.
-    selBufHighlightOnlyFilename 0       A non-zero value for this setting makes
-                                        the plugin highlight only the filename
-                                        when the full path is shown, making it
-                                        easy to spot the filename.
+    selBufIgnoreCaseInSort      0       A non-zero value for this setting makes
+                                        the sort compare the buffer names and
+                                        paths case-insensitively.
     selBufIgnoreNonFileBufs     1       Normally, the plugin ignores all the
                                         non-file buffers (those that have
                                         'buftype' option set) for MRU ordering
@@ -417,7 +533,7 @@ defaults.
                                         sizes when the browser is opened and
                                         restore them while closing it. Set this
                                         to 0 to disable the feature.
-    selBufSplitType             <none>  
+    selBufSplitType             <none>
                                         If set, this is prefixed to the |split|
                                         command used for opening the browser
                                         window. See |:vertical| for possible
@@ -438,6 +554,27 @@ defaults.
                                         to your |:messages|. If you don't like
                                         this, set this to 0 to disable this
                                         feature.
+    selBufDisplayMaxPath        -1      This setting specifies the width to
+                                        which the paths should be trimmed to.
+                                        When the path name for a buffer is too
+                                        long to be fit in the current window,
+                                        the more distinguishing path components
+                                        will normally be pushed out of the
+                                        display. Setting this value to a
+                                        positive number will allow you to
+                                        always see these path components instead
+                                        of loosing them to the window.
+    selBufLauncher              "!start rundll32 url.dll,FileProtocolHandler" (windows)
+                                "" (other platforms)                       
+                                        The command that should be used to
+                                        launch files when |SBLaunch| command is
+                                        used. On windows it is set to a value
+                                        that is acceptable to most of the people
+                                        and is empty on other platforms. You can
+                                        set it to any Vim built-in/user-defined
+                                        or external command (by prefixing it
+                                        with a bang (|:!|)) that accepts a
+                                        filename.
 
 
 Note that these variables are required only during the startup and
@@ -453,8 +590,222 @@ below: >
     "= Sorting=mru,showDetails=0,showHidden=0,showPaths=0,hideBufNums=0
 <
 ==============================================================================
+                                            *selectbuf-filetype*
+                                            *selectbuf-syntax-coloring*
+The syntax colors in the browser window can easily be customized, by following
+the same procedure that you would follow for customizing any language syntax
+file. All the syntax groups defined by the plugin start with the prefix "SelBuf"
+and they all are linked to a default highlighting group. Here is a table with
+all the defaults:
 
-                                            *selectbuf-changes*    
+    Syntax Group            Default Highlighting Group ~
+    SelBufHelpLine          Comment
+    SelBufMapping           Special
+    SelBufSummary           Statement
+    SelBufKeyWords          Keyword
+    SelBufKeyValues         Constant
+    SelBufBufNumber         Constant
+    SelBufBufIndicators     Label
+    SelBufBufName           Directory
+    SelBufPath              Identifier
+    SelBufSummary           Special
+
+To change the colors for any of the above syntax groups, simply link them to any
+existing or new highlighting group as below (you can place it in your vimrc):
+>
+	:highlight link SelBufSummary WarningMsg
+<
+In addition, the plugin also sets 'filetype' of the browser window to
+"selectbuf". This allows you to create a syntax/selectbuf.txt file in your
+'runtimepath' to define additional syntax rules such that you can highlight
+important keywords etc. that occur in the path, buffer name or indicators (or
+the entire line).
+
+All that the plugin actually does is to define four syntax clusters as place
+holders and include them as part of the four different syntax matches that it
+defines. The user then just needs to create additional syntax rules and add them
+to the corresponding cluster. Here is a table that lists these four clusters:
+
+        Match Group             Cluster Name ~
+        SelBufBufName           SelBufBufAdd
+        SelBufPath              SelBufPathAdd
+        SelBufBufIndicators     SelBufIndAdd
+        SelBufBufLine           SelBufLineAdd
+
+As an example, here is a simple syntax file (named syntax/selectbuf.vim) that
+will highlight the keywords "oracle" and "mssql" in different colors when they
+occur in the path:
+>
+        syn keyword SelBufOracle oracle
+        syn keyword SelBufMssql mssql
+        hi link SelBufOracle Special
+        hi link SelBufMssql Underlined
+        syn cluster SelBufPathAdd add=SelBufOracle,SelBufMssql
+<
+(I actually use something like above to easily distinguish the files with the
+same name that exist in oracle and mssql subdirectories, this is very useful,
+especially with the new split mode (see, |selBufAlwaysShowPaths|)).
+
+Though the above example shows defining only simple keywords, you can create
+complex |syn-match|'s and include them as part of the corresponding cluster.
+
+                                            *selectbuf-extend*
+                                            *selectbuf-API*
+The filetype customization is not limited to syntax coloring. It is possible to
+create a filetype plugin (ftplugin/selectbuf.vim) that actually enables you to
+extend the functionality with new commands and customize further in the browser
+window. The plugin provides public functions to get the buffer number so that
+you can create new commands that operate on the buffer list.
+>
+        " Buffer number of the current buffer in the list.
+        " Returns -1 if not on a buffer line.
+        int SBCurBufNumber()
+        " Buffer number of the buffer at the given line in the list.
+        " Returns -1 if not on a buffer line.
+        int SBBufNumber(int line)
+        " Update line for given buffer.
+        int SBUpdateBuffer(int bufNr)
+        " Returns the list of all the buffers in a form that can be directly
+        "   used in an ex command accepting buffer names, for the given range.
+        "   When multiselect is installed and there are multiple selections
+        "   currently existing, the parameters are ignored.
+        String SBSelectedBuffers(int firstline, int lastline)
+        " Same as SBSelectedBuffers(), except that only the buffer numbers are
+        "   returned.
+        String SBSelectedBufNums(int firstline, int lastline)
+        String SBSelectedBuffers(int firstline, int lastline)
+<
+It is also possible for other plugin writers to customize selectbuf such that
+new commands are automatically added to the browser. For example, a CVS plugin
+can add ftplugin/selectbuf_cvs.vim with commands such as the below, which get
+automatically added when the browser window is opened (assume that "CVS edit
+<file>" is the actual command to open a file for "edit"):
+>
+        " Define a CVS command to edit the current file.
+        nnoremap <buffer> \cvse :SBExec CVS edit<CR>
+        vnoremap <buffer> \cvse :SBExec CVS edit<CR>
+<
+Or a more generic command, such as:
+>
+        nnoremap <buffer> \cvs :SBExec CVS 
+        vnoremap <buffer> \cvs :SBExec CVS 
+<
+                                            *selectbuf-extend-examples*
+As an example, here is a simple custom command that selects the current buffer
+saves it and returns back to browser window.
+>
+        nmap <buffer> <C-S> O:w<CR>:SelectBuf<CR>
+<
+which can also be written more precisely as:
+>
+        nnoremap <silent> <buffer> <C-S> :call <SID>SaveCurrentBuffer()<CR>
+
+        if !exists('*s:SaveCurrentBuffer'')
+          function! s:SaveCurrentBuffer()
+            if SBCurBufNumber() != -1
+              normal O
+              w
+              SelectBuf
+            endif
+          endfunction
+        endif
+<
+This command will then be defined as part of the browser window (make sure you
+use <buffer> option for maps and -buffer option for commands). Note that the if
+!exists block is a recommended practice (and required in this case) for writing
+ftplugins (see |ftplugin| for this and other guidelines for writing a new
+ftplugin). 
+
+Other examples:
+    - create a command to backup the selected files to a predefined location,
+      something like this:
+>
+        nnoremap <silent> <buffer> <Leader>b :SBExec !cp %s /backup
+<
+    - create a command to remove selected files from the filesystem as well as
+      the corresponding buffers from Vim.
+>
+        vnoremap <silent> <buffer> <Leader>r :call <SID>RemoveFiles()<CR>
+
+        if !exists('*s:RemoveFiles')
+          function! s:RemoveFiles() range
+            let opt = confirm('Do you want to remove selected files '.
+                \ 'permanently (from filesystem and vim)?',
+                \ "&Yes\n&No", 2, 'Question')
+            if opt == 1
+              let selBufs = SBSelectedBuffers(a:firstline, a:lastline)
+              let selBufNums = SBSelectedBufNums(a:firstline, a:lastline)
+              exec '!rm' selBufs
+              exec 'bwipeout' selBufNums
+            endif
+          endfunction
+        endif
+<
+    - If multiselect.vim is installed, you can have it automatically select
+      files and do operations on them, e.g., you can creat a command to have all
+      the open files under src selected and zipped (using info-zip commandline
+      tool). This assumes that the path is being currently shown:
+>
+        command! -buffer BackupSrcChanges :call <SID>BackupSrcChanges()
+
+        if !exists('*s:BackupSrcChanges')
+          function! s:BackupSrcChanges()
+            let zipFile = inputdialog('Enter zip file: ', '/tmp/src.zip')
+            if zipFile != '' && search('^"= ', 'w')
+              +,$MSMatchAdd /src/
+              exec 'SBExec !zip' zipFile
+            endif
+          endfunction
+        endif
+<
+See help on |SBExec|.
+==============================================================================
+
+                                            *selectbuf-multiselect*
+If multiselect.vim plugin is installed, the plugin automatically makes use of
+the multiple selections, if any, for the commands that operate on visual
+selections (such as buffer deletion or wipeout and the :SBExec command).
+==============================================================================
+
+                                            *selectbuf-deprecations*
+- With the addition of the feature to split file paths,
+  selBufHighlightOnlyFilename setting is unnecessary and so is no longer
+  supported.
+- Dropped selBufWindowName, selBufRemoveBrowserBuffer, selBufOpenInNewWindow,
+  selBufAlwaysWrapLines, selBufAlwaysShowDirectories, selBufIntWithWinManager
+  settings.
+
+==============================================================================
+                                            *selectbuf-limitations*
+- When using incremental update feature of the plugin, there is no attempt made
+  to keep the file paths up to date when you change the current directory. This
+  however impacts only when the selBufAlwaysShowPaths has value 1, and can be
+  worked-around by refreshing the browser window.
+- When using incremental update feature of the plugin, there is no attempt made
+  to update the '%' and '#' buffers when the active window is changed. This
+  impacts only when selBufAlwaysShowDetails is enabled and can be worked around
+  by reloading the current buffer using the :e command (with no arguments)
+
+==============================================================================
+                                            *selectbuf-changes*
+
+                                            *selectbuf-changes-3.2*
+- Added a feature to split file paths, instead of the setting
+  selBufHighlightOnlyFilename. See help on |selBufAlwaysShowPaths|. The browser
+  by default now starts with this mode.
+- The display is now more compact by the use of only required number of spaces
+  than using hard tabs.
+- A setting to ignore case while sorting, see |selBufIgnoreCaseInSort|.
+- A new "selectbuf" filetype to further customize the syntax highlighting and
+  extend the functionality, see |selectbuf-filetype|. There is now an API
+  available, see |selectbuf-extend|.
+- New command SBExec for selections, see |SBExec|. Extremely useful to execute
+  external commands.
+- Support for multiple selections through multiselect.vim plugin, see
+  |selectbuf-multiselect|.
+- New command (very useful, at least on MS Windows), |SBLaunch|.
+- Improved |SelBufTHiddenKey| and |SelBufTDetailsKey| to avoid doing a full
+  refresh. It should work much faster now.
 
                                             *selectbuf-changes-3.1*
 - Fixed problem with disabling DelayedDynUpdate under WinManager. Also this
@@ -491,15 +842,18 @@ below: >
                                             *selectbuf-known-issues*
 - Opening a large set of files at a time takes longer than it would usually
   take. This is because, the plugin has to generate an MRU list for each buffer
-  that gets loaded into the vim. I have observed that opening 1500 files at a
-  time took almost 40 to 50% longer. If there are other plugins that manage MRU
-  lists at the same time, the impact can be even worse. You can temporarily
-  disable MRU feature in selectbuf (and later enable it back) by using the
-  |selBufDisableMRUlisting| setting. This should reduce the time taken for
-  loading the buffers, though the MRU listing then may not show all the
-  buffers. You may have to select a different sort field and probably do a
+  that gets loaded into Vim. I have observed that opening 1500 files at a
+  time took almost 40 to 50% longer on an old laptop. If there are other plugins
+  that manage MRU lists at the same time, the impact can be even worse. You can
+  temporarily disable MRU feature in selectbuf (and later enable it back) by
+  using the |selBufDisableMRUlisting| setting. This should reduce the time taken
+  for loading the buffers, though the MRU listing then may not show all the
+  buffers.  You may have to select a different sort field and probably do a
   refresh (unless the |selBufEnableDynUpdate| is disabled) before you can see
   the complete list.
+- If you perform a command from plugin window that splits the window and
+  switches to a different buffer, the plugin changes the mode and the 'quit'
+  behavior changes.
 
                                             *selectbuf-wishlist*
 TBD

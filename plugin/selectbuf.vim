@@ -1,16 +1,19 @@
 " selectbuf.vim
-" Author: Hari Krishna <hari_vim at yahoo dot com>
-" Last Change: 01-May-2003 @ 17:41PM
-" Created: Before 20-Jul-1999 (http://groups.yahoo.com/group/vim/message/6409)
-" Requires: Vim-6.0, multvals.vim(3.1), genutils.vim(1.6)
-" Version: 3.1.7
+" Author: Hari Krishna (hari_vim at yahoo dot com)
+" Last Change: 04-Apr-2004 @ 16:53
+" Created: Before 20-Jul-1999
+"          (Ref: http://groups.yahoo.com/group/vim/message/6409
+"                mailto:vim-thread.1235@vim.org)
+" Requires: Vim-6.2, multvals.vim(3.5), genutils.vim(1.10)
+" Depends On: multiselect.vim(1.0)
+" Version: 3.2.10
 " Licence: This program is free software; you can redistribute it and/or
 "          modify it under the terms of the GNU General Public License.
 "          See http://www.gnu.org/copyleft/gpl.txt 
 " Download From:
 "     http://www.vim.org/script.php?script_id=107
 " Usage: 
-"   For detailed help, see ":help selectbuf" or doc/selectbuf.txt. 
+"   For detailed help, see ":help selectbuf" or read doc/selectbuf.txt. 
 "
 "   Source this file or drop it in plugin directory and press <F3> to get the
 "     list of buffers.
@@ -24,12 +27,36 @@
 "     buffers using u command).
 "
 " TODO:
+"   - Switch to another buffer and come back. Bizarre.
+"   - s:curBufNameLen is getting reset to 9 elsewhere.
+"   - I need to consolidate all the event rules at one place.
+"   - Is sort by path working correctly?
 "   - When entering any of the plugin window's WinManager does something that
-"     makes Vim ignore fast mouse-double-clicks. This is a WinManager issue,
+"     makes Vim ignore quick mouse-double-clicks. This is a WinManager issue,
 "     as I verified this problem with other plugins also and SelectBuf in
 "     stand-alone "keep" mode works fine.
 
 if exists("loaded_selectbuf")
+  finish
+endif
+if v:version < 602
+  echomsg "You need Vim 6.2 to run this version of selectbuf.vim."
+  finish
+endif
+
+" Dependency checks.
+if !exists("loaded_multvals")
+  runtime plugin/multvals.vim
+endif
+if !exists("loaded_multvals") || loaded_multvals < 305
+  echomsg "SelectBuf: You need a newer version of multvals.vim plugin"
+  finish
+endif
+if !exists("loaded_genutils")
+  runtime plugin/genutils.vim
+endif
+if !exists("loaded_genutils") || loaded_genutils < 110
+  echomsg "SelectBuf: You need a newer version of genutils.vim plugin"
   finish
 endif
 let loaded_selectbuf=1
@@ -47,29 +74,35 @@ command! -nargs=0 SBInitialize :call <SID>Initialize()
 " Initializations {{{
 function! s:Initialize() " {{{
 
-"
+" [-2s]
 "" START: configuration 
 "
 
-if !exists("s:disableSummary") " The first-time only, initialize with defaults.
+if !exists('s:disableSummary') " The first-time only, initialize with defaults.
   let s:disableSummary = 1
-  let s:highlightOnlyFilename = 0
   let s:restoreWindowSizes = 1
-  let s:sorttype = "mru"
+  let s:sorttype = 'mru'
   let s:sortdirection = 1
   let s:ignoreNonFileBufs = 1
   let s:showHelp = 0
   let s:showHidden = 0
   let s:showDetails = 0
-  let s:showPaths = 0
+  let s:showPaths = 2
   let s:hideBufNums = 0
-  let s:browserMode = "split"
+  let s:browserMode = 'split'
   let s:useVerticalSplit = 0
-  let s:splitType = ""
+  let s:splitType = ''
   let s:disableMRUlisting = 0
   let s:enableDynUpdate = 1
   let s:delayedDynUpdate = 0
   let s:doFileOnClose = 1
+  let s:ignoreCaseInSort = 0
+  let s:displayMaxPath = -1
+  if OnMS()
+    let s:launcher = '!start rundll32 url.dll,FileProtocolHandler'
+  else
+    let s:launcher = ''
+  endif
 endif
 
 function! s:CondDefSetting(globalName, settingName, ...)
@@ -81,25 +114,26 @@ function! s:CondDefSetting(globalName, settingName, ...)
 endfunction
 
 call s:CondDefSetting('g:selBufDisableSummary', 's:disableSummary')
-call s:CondDefSetting("g:selBufHighlightOnlyFilename",
-      \ 's:highlightOnlyFilename')
-call s:CondDefSetting("g:selBufRestoreWindowSizes", 's:restoreWindowSizes')
-call s:CondDefSetting("g:selBufDefaultSortOrder", 's:sorttype')
-call s:CondDefSetting("g:selBufDefaultSortDirection", 's:sortdirection')
-call s:CondDefSetting("g:selBufIgnoreNonFileBufs", 's:ignoreNonFileBufs')
-call s:CondDefSetting("g:selBufAlwaysShowHelp", 's:showHelp')
-call s:CondDefSetting("g:selBufAlwaysShowHidden", 's:showHidden')
-call s:CondDefSetting("g:selBufAlwaysShowDetails", 's:showDetails')
-call s:CondDefSetting("g:selBufAlwaysShowPaths", 's:showPaths')
-call s:CondDefSetting("g:selBufAlwaysHideBufNums",
-      \ 's:hideBufNums | let s:userDefinedHideBufNums = 1')
-call s:CondDefSetting("g:selBufBrowserMode", 's:browserMode')
-call s:CondDefSetting("g:selBufUseVerticalSplit", 's:useVerticalSplit')
-call s:CondDefSetting("g:selBufSplitType", 's:splitType')
-call s:CondDefSetting("g:selBufDisableMRUlisting", 's:disableMRUlisting')
-call s:CondDefSetting("g:selBufEnableDynUpdate", 's:enableDynUpdate')
-call s:CondDefSetting("g:selBufDelayedDynUpdate", 's:delayedDynUpdate')
-call s:CondDefSetting("g:selBufDoFileOnClose", 's:doFileOnClose')
+call s:CondDefSetting('g:selBufRestoreWindowSizes', 's:restoreWindowSizes')
+call s:CondDefSetting('g:selBufDefaultSortOrder', 's:sorttype')
+call s:CondDefSetting('g:selBufDefaultSortDirection', 's:sortdirection')
+call s:CondDefSetting('g:selBufIgnoreNonFileBufs', 's:ignoreNonFileBufs')
+call s:CondDefSetting('g:selBufAlwaysShowHelp', 's:showHelp')
+call s:CondDefSetting('g:selBufAlwaysShowHidden', 's:showHidden')
+call s:CondDefSetting('g:selBufAlwaysShowDetails', 's:showDetails')
+call s:CondDefSetting('g:selBufAlwaysShowPaths', 's:showPaths')
+call s:CondDefSetting('g:selBufAlwaysHideBufNums', 's:hideBufNums',
+      \ 'g:selBufAlwaysHideBufNums | let s:userDefinedHideBufNums = 1')
+call s:CondDefSetting('g:selBufBrowserMode', 's:browserMode')
+call s:CondDefSetting('g:selBufUseVerticalSplit', 's:useVerticalSplit')
+call s:CondDefSetting('g:selBufSplitType', 's:splitType')
+call s:CondDefSetting('g:selBufDisableMRUlisting', 's:disableMRUlisting')
+call s:CondDefSetting('g:selBufEnableDynUpdate', 's:enableDynUpdate')
+call s:CondDefSetting('g:selBufDelayedDynUpdate', 's:delayedDynUpdate')
+call s:CondDefSetting('g:selBufDoFileOnClose', 's:doFileOnClose')
+call s:CondDefSetting('g:selBufIgnoreCaseInSort', 's:ignoreCaseInSort')
+call s:CondDefSetting('g:selBufDisplayMaxPath', 's:displayMaxPath')
+call s:CondDefSetting('g:selBufLauncher', 's:launcher')
 
 "
 " END configuration.
@@ -147,6 +181,7 @@ call s:DefDefMap('n', 'SortRevKey', "r")
 call s:DefDefMap('n', 'QuitKey', "q")
 call s:DefDefMap('n', 'THelpKey', "?")
 call s:DefDefMap('n', 'ShowSummaryKey', "<C-G>")
+call s:DefDefMap('n', 'LaunchKey', "A")
 delfunction s:DefDefMap
 
 
@@ -161,6 +196,7 @@ command! -nargs=1 SBBufToTail :call <SID>PushToBackInMRU(
       \ (<f-args> !~ '^\d\+$') ? bufnr(<f-args>) : <f-args>, 1)
 " Command to change settings interactively.
 command! -nargs=0 SBSettings :call <SID>SBSettings()
+command! -complete=file -nargs=+ SBLaunch :call <SID>LaunchBuffer(<f-args>)
 
 " The main plug-in mapping.
 noremap <script> <silent> <Plug>SelectBuf :call <SID>ListBufs()<CR>
@@ -179,24 +215,32 @@ aug END
 
 endfunction " -- Initialize }}}
 
-" Do the actual initialization.
-call s:Initialize()
-
 " One-time initialization of some script variables {{{
-" These are typically those that save the state are some constants which are
-"   not impacted directly by user.
-" This is the current buffer when the browser is invoked ('%').
-let s:originalCurBuffer = 1
-" This is the alternate buffer when the browser is invoked ('#').
-let s:originalAltBuffer = 1
-" The size of the current header. Used for mapping file names to buffer
-"   numbers when buffer numbers are hidden.
-let s:headerSize = 0
-let s:myBufNum = -1
-let s:savedSearchString = ""
-" The operating mode for the current session. This is reset after the browser
-"   is closed. Ideally, we assume that the browser is open in only one window.
-let s:opMode = ""
+" These are typically those that save the state are those which are not
+"   impacted directly by user.
+if !exists('s:myBufNum') 
+  " This is the current buffer when the browser is invoked ('%').
+  let s:originalCurBuffer = 1
+  " This is the alternate buffer when the browser is invoked ('#').
+  let s:originalAltBuffer = 1
+  " The size of the current header. Used for mapping file names to buffer
+  "   numbers when buffer numbers are hidden.
+  let s:headerSize = 0
+  let s:myBufNum = -1
+  let s:savedSearchString = ""
+  let s:curBufNameLen = 9 " Buffer name length used currently, start with min.
+  " The operating mode for the current session. This is reset after the browser
+  "   is closed. Ideally, we assume that the browser is open in only one window.
+  let s:opMode = ""
+
+  let s:pendingUpdAxns = ""
+  let s:auSuspended = 1 " Disable until we are ready.
+  let s:bufList = ""
+  let s:indList = ""
+
+  " This is the list maintaining the MRU order of buffers.
+  let s:MRUlist = ''
+endif
 
 let s:sortByNumber=0
 let s:sortByName=1
@@ -208,16 +252,12 @@ let s:sortByMaxVal=5
 
 let s:sortdirlabel  = ""
 
-let s:pendingUpdAxns = ""
-let s:auSuspended = 1 " Disable until we are ready.
-let s:bufList = ""
-let s:indList = ""
-
 let s:settings = 'AlwaysHideBufNums,AlwaysShowDetails,AlwaysShowHelp,' .
       \ 'AlwaysShowHidden,AlwaysShowPaths,BrowserMode,DefaultSortDirection,' .
       \ 'DefaultSortOrder,DelayedDynUpdate,DisableMRUlisting,DisableSummary,' .
-      \ 'EnableDynUpdate,HighlightOnlyFilename,IgnoreNonFileBufs,' .
-      \ 'RestoreWindowSizes,SplitType,UseVerticalSplit,DoFileOnClose'
+      \ 'EnableDynUpdate,IgnoreCaseInSort,IgnoreNonFileBufs,' .
+      \ 'RestoreWindowSizes,SplitType,UseVerticalSplit,DoFileOnClose,' .
+      \ 'DisplayMaxPath,Launcher'
 " Map of global variable name to the local variable that are different than
 "   their global counterparts.
 let s:settingsMap{'DefaultSortOrder'} = 'sorttype'
@@ -227,9 +267,6 @@ let s:settingsMap{'AlwaysShowHidden'} = 'showHidden'
 let s:settingsMap{'AlwaysShowDetails'} = 'showDetails'
 let s:settingsMap{'AlwaysShowPaths'} = 'showPaths'
 let s:settingsMap{'AlwaysHideBufNums'} = 'hideBufNums'
-
-" This is the list maintaining the MRU order of buffers.
-let s:MRUlist = ''
 
 "let g:SB_MESSAGES = ''
 
@@ -264,17 +301,19 @@ function! s:ListBufs()
   endif
 
   call s:SuspendAutoUpdates('ListBufs')
+  try
+    call s:GoToBrowserWindow(browserWinNo)
+    call s:UpdateBuffers(0) " It will do a full refresh if required.
+    if s:opMode ==# 'WinManager'
+      call WinManagerForceReSize('SelectBuf')
+    else
+      call s:AdjustWindowSize()
+    endif
+  finally
+    call s:ResumeAutoUpdates()
+  endtry
 
-  call s:GoToBrowserWindow(browserWinNo)
-  call s:UpdateBuffers(0) " It will do a full refresh if required.
-  if s:opMode == 'WinManager'
-    call WinManagerForceReSize('SelectBuf')
-  else
-    call s:AdjustWindowSize()
-  endif
-  call s:ResumeAutoUpdates()
-
-  if s:opMode == 'user' && s:browserMode != 'keep'
+  if s:opMode ==# 'user' && s:browserMode !=# 'keep'
     if s:savedSearchString != ''
       let @/ = s:savedSearchString
     endif
@@ -316,9 +355,9 @@ function! s:UpdateHeader()
 
   call s:AddHeader()
   call search('^"= ', "w")
-  let s:headerSize = line(".")
+  let s:headerSize = line('.')
 
-  if s:opMode == 'WinManager'
+  if s:opMode ==# 'WinManager'
     call WinManagerForceReSize('SelectBuf')
   else
     call s:AdjustWindowSize()
@@ -326,11 +365,12 @@ function! s:UpdateHeader()
 
   " Return to the original position.
   call RestoreSoftPosition("UpdateHeader")
+  call ResetSoftPosition("UpdateHeader")
 
   setlocal nomodifiable
 endfunction " UpdateHeader
 
-function s:MapArg(key)
+function! s:MapArg(key)
   return maparg('<Plug>SelBuf' . a:key)
 endfunction
 
@@ -396,13 +436,13 @@ function! s:AutoUpdateBuffers(fullUpdate)
 endfunction
 " }}}
 
-function! s:ShouldShowBuffer(bufNr) " {{{
+function! s:ShouldShowBuffer(bufNum) " {{{
   let showBuffer = 1
-  if bufexists(a:bufNr)
+  if bufexists(a:bufNum)
     " If user wants to hide hidden buffers.
-    if s:ignoreNonFileBufs && getbufvar(a:bufNr, '&buftype') != ''
+    if s:IgnoreBuf(a:bufNum)
       let showBuffer = 0
-    elseif ! s:showHidden && ! buflisted(a:bufNr)
+    elseif ! s:showHidden && ! buflisted(a:bufNum)
       let showBuffer = 0
     endif
   else
@@ -414,18 +454,16 @@ endfunction " }}}
 function! s:FullUpdate() " {{{
   setlocal modifiable
 
-  " Go as far as possible in the undo history to conserve Vim resources.
-  let i = 0
-  while line('$') != 1 && i < &undolevels
-    silent! undo
-    let i = i + 1
-  endwhile
-  " Delete the contents if there are still any.
-  silent! 0,$delete _
+  call OptClearBuffer()
 
   call s:AddHeader()
   silent! $delete _ " Delete one empty extra line at the end.
   let s:headerSize = line("$")
+  let _curBufNameLen = s:curBufNameLen
+  let s:curBufNameLen = s:CalcMaxBufNameLen(-1, !s:showHidden)
+  if _curBufNameLen != s:curBufNameLen
+    call s:SetupSyntax()
+  endif
 
   $
   " Loop over all the buffers.
@@ -435,7 +473,7 @@ function! s:FullUpdate() " {{{
   let showBuffer = 0
   let s:bufList = ""
   let lastBufNr = bufnr('$')
-  if s:optMRUfullUpdate && s:GetSortNameByType(s:sorttype) == 'mru'
+  if s:optMRUfullUpdate && s:GetSortNameByType(s:sorttype) ==# 'mru'
     let i = s:NextBufInMRU()
   else
     let i = 1
@@ -449,7 +487,7 @@ function! s:FullUpdate() " {{{
       let nBuffersShown = nBuffersShown + 1
     endif
     let nBuffers = nBuffers + 1
-    if s:optMRUfullUpdate && s:GetSortNameByType(s:sorttype) == 'mru'
+    if s:optMRUfullUpdate && s:GetSortNameByType(s:sorttype) ==# 'mru'
       let i = s:NextBufInMRU()
     else
       let i = i + 1
@@ -458,8 +496,8 @@ function! s:FullUpdate() " {{{
 
   if line("$") != s:headerSize
     " Finally sort the listing based on the current settings.
-    if (!s:optMRUfullUpdate || s:GetSortNameByType(s:sorttype) != 'mru') &&
-	  \ s:GetSortNameByType(s:sorttype) != 'number'
+    if (!s:optMRUfullUpdate || s:GetSortNameByType(s:sorttype) !=# 'mru') &&
+	  \ s:GetSortNameByType(s:sorttype) !=# 'number'
       call s:SortBuffers(0)
     endif
 
@@ -486,7 +524,8 @@ function! s:FullUpdate() " {{{
 endfunction " FullUpdate " }}}
 
 " Incremental update support {{{
-function! s:IncrementalUpdate()
+"let g:selbufDebug='' 
+function! s:IncrementalUpdate() " {{{
   " If there are no pending updates, then we don't have to do anything.
   if s:pendingUpdAxns == ""
     return
@@ -510,24 +549,63 @@ function! s:IncrementalUpdate()
     let bufNo = nextAxn + 0
     let action = nextAxn[strlen(nextAxn) - 1] " Last char.
 
-    " For delete, skip when we are showing hidden buffers but not details.
-    if action == 'd' && s:showHidden && ! s:showDetails
+    if (action ==# 'I' || action ==# 'i' || action ==# 'l') && s:showPaths == 2
+      let newMax = (action ==# 'i' && bufNo != -1) ? strlen(s:FileName(bufNo)) :
+            \ s:CalcMaxBufNameLen(bufNo, !s:showHidden)
+      "let g:selbufDebug = g:selbufDebug.'action:'.action.' file:'.s:FileName(bufNo).' s:curBufNameLen:'.s:curBufNameLen.' newMax:'.newMax."\n"
+      if s:showPaths == 2 && s:curBufNameLen != newMax
+        call search('^"= ', "w")
+        let _search = @/
+        try
+          " If the max. buffer name length has increased or decreased since
+          " the last time, we need to fix the existing buffer lines first.
+          if (action ==# 'i' || action ==# 'l') && s:curBufNameLen < newMax
+            " Insert enough extra spacer for all the existing buffers.
+            let addSpacer = GetSpacer(newMax - s:curBufNameLen)
+            let colToIns = (s:showDetails ? 11 : 5) + s:curBufNameLen +
+                  \ 1 " Col index starts with 1.
+            let @/ = '\%'.colToIns.'c'
+            silent! exec '+,$s//'.addSpacer.'/'
+          elseif (action ==# 'I' || action ==# 'l') && s:curBufNameLen > newMax
+            "exec BPBreak(1)
+            let remSpacer = ' \{'.(s:curBufNameLen - newMax).'}'
+            let colToDel = (s:showDetails ? 11 : 5) + newMax
+                  \ + 1 " Col index starts with 1.
+            let @/ = '\%'.colToDel.'c'.remSpacer
+            silent! exec '+,$s///'
+          else
+            let newMax = 0
+          endif
+        finally
+          let @/=_search
+          if newMax != 0
+            let s:curBufNameLen = newMax
+            call s:SetupSyntax()
+          endif
+        endtry
+      endif
       continue
-      " For create, skip when the buffer is hidden and we don't show hidden
-      " buffers.
-    elseif action == 'c' && ! s:showHidden && ! buflisted(bufNo)
+
+    " For delete, skip when we are showing hidden buffers but not details.
+    elseif action ==# 'd' && s:showHidden && ! s:showDetails
+      continue
+
+    " For 'm' or 'u', skip when the buffer is hidden and we don't show [-2s]
+    "   hidden buffers (we would like to add 'c' also here but a buffer can
+    "   never be unlisted by the time it is created).
+    elseif action =~ '[um]' && ! s:showHidden && ! buflisted(bufNo)
       continue
     endif
 
     if search('^' . bufNo . '\>', 'w') > 0
-      if action == 'u' || (action == 'd' && s:showHidden)
+      if action ==# 'u' || (action ==# 'd' && s:showHidden)
 	call setline('.', s:GetBufLine(bufNo))
 	continue
       else
 	silent! .delete _
       endif
     endif
-    if action == 'c' || action == 'm'
+    if action ==# 'c' || action ==# 'm'
       let bufLine = s:GetBufLine(bufNo)
       let lineNoToInsert = BinSearchForInsert(s:headerSize + 1, line("$"),
 	    \ bufLine, s:GetSortCmpFnByType(s:GetSortTypeByName(s:sorttype)),
@@ -536,6 +614,7 @@ function! s:IncrementalUpdate()
     endif
   endwhile
   call MvIterDestroy('SelectBufUpdateAxns')
+
   let s:pendingUpdAxns = ""
 
   call s:MarkBuffers()
@@ -547,38 +626,47 @@ function! s:IncrementalUpdate()
   endif
 
   call RestoreSoftPosition("IncrementalUpdate")
-  normal zb
-endfunction " IncrementalUpdate
+  call ResetSoftPosition("IncrementalUpdate")
+  normal! zb
+endfunction " IncrementalUpdate }}}
 
-" action:
-"   c - buffer added (add line).
-"   d - buffer deleted (remove only if !showHidden and update otherwise).
-"   w - buffer wipedout (remove in any case).
-"   u - needs an update.
-"   m - needs to be moved (remove and add back).
-function! s:DynUpdate(action, bufNum, ovrrdDelayDynUpdate)
+" Actions:
+"   'c' - buffer added (add line).
+"   'd' - buffer deleted (remove only if !showHidden and update otherwise).
+"   'w' - buffer wipedout (remove in any case).
+"   'u' - needs an update.
+"   'm' - needs to be moved (remove and add back).
+"   'i' - Increase in max length due to loading bufNo.
+"   'I' - Decrease in max length due to wiping out bufNo (which is to be ignored
+"         while calculating new max).
+"   'l' - Recalculate max length, no significance for bufNo.
+function! s:DynUpdate(action, bufNum, ovrrdDelayDynUpdate) " {{{
   let bufNo = a:bufNum
   if bufNo == -1 || bufNo == s:myBufNum || s:AUSuspended()
     return
   endif
-  if s:ignoreNonFileBufs && getbufvar(bufNo, '&buftype') != ''
+  " This means that only 'd', 'w' and most of the 'c' events get through. If
+  "   the buffer is ignored by its name, the 'c' events will not get through,
+  "   so their corresponding 'd' or 'w' event is redundant, but there is no
+  "   way to avoid it.
+  if s:IgnoreBuf(a:bufNum) && (a:action !=# 'd' && a:action !=# 'w')
     return
   endif
 
   let ignore = 0
-  if (a:action == 'u' || a:action == 'm') &&
-	\ MvContainsPattern(s:pendingUpdAxns, ',', bufNo . 'c')
+  if (a:action ==# 'u' || a:action ==# 'm') &&
+	\ MvContainsElement(s:pendingUpdAxns, ',', bufNo . 'c')
     let ignore = 1
-  elseif a:action == 'w'
-    while 1
-      let pendingUpdAxns = s:pendingUpdAxns
-      let s:pendingUpdAxns = MvRemovePattern(s:pendingUpdAxns, ',',
-	    \ bufNo . '\a')
-      if pendingUpdAxns == s:pendingUpdAxns
-	break
-      endif
-    endwhile
-  elseif MvContainsPattern(s:pendingUpdAxns, ',', bufNo . a:action)
+  elseif a:action ==# 'w'
+    let s:pendingUpdAxns = MvRemovePatternAll(s:pendingUpdAxns, ',',
+          \ bufNo . '\a')
+  elseif a:action ==# 'i'
+    " Special case which requires us to add spacer first.
+    let s:pendingUpdAxns = bufNo . a:action. ',' . s:pendingUpdAxns
+    let ignore = 1
+  elseif a:action ==# 'I'
+    let s:pendingUpdAxns = MvRemovePatternAll(s:pendingUpdAxns, ',', '\d\+I')
+  elseif MvContainsElement(s:pendingUpdAxns, ',', bufNo . a:action)
     let ignore = 1
   endif
   if ! ignore
@@ -596,9 +684,9 @@ function! s:DynUpdate(action, bufNum, ovrrdDelayDynUpdate)
   let browserWinNo = bufwinnr(s:myBufNum)
   if ! s:delayedDynUpdate && browserWinNo != -1 && ! s:AUSuspended() &&
 	\ s:pendingUpdAxns != '' && !a:ovrrdDelayDynUpdate
-    if s:opMode != 'WinManager' || !WinManagerAUSuspended()
+    if s:opMode !=# 'WinManager' || !WinManagerAUSuspended()
       " CAUTION: Using bufnr('%') is not reliable in the case of ":split new".
-      "	  By the time the BufAdd even is fired, the window is already created,
+      "	  By the time the BufAdd event is fired, the window is already created,
       "	  but the bufnr() still gives the old buffer number. Using winnr()
       "	  alone seems to work well.
       "let prevFile = bufnr('%')
@@ -611,33 +699,55 @@ function! s:DynUpdate(action, bufNum, ovrrdDelayDynUpdate)
       call s:GoToWindow(win)
     endif
   endif
-endfunction
+endfunction " }}}
 " Incremental update support }}}
 
 " Event handlers {{{
 function! s:BufWinEnter()
-  call s:PushToFrontInMRU(expand("<abuf>") + 0, 0)
+  " Optimization: Pass 1 for updImm only when the next call is not going to be
+  "   effective.
+  call s:PushToFrontInMRU(expand("<abuf>") + 0,
+        \ (! s:IgnoreBuf(bufnr('#') + 0) && !s:showDetails) ? 1 : 0)
   " FIXME: In case of :e#, the alternate buffer must have got updated because
   "   of a BufWinLeave event, but it looks like this buffer still appears as
   "   the current and active buffer at that time, so details will show
   "   incorrect information. As a workaround, update this buffer again.
-  call s:DynUpdate('u', bufnr('#') + 0, 0)
-endfunction
-
-function! s:BufWinLeave()
-  call s:DynUpdate('u', expand("<abuf>") + 0, 1)
-endfunction
-
-function! s:BufWipeout()
-  call s:DelFromMRU(expand("<abuf>") + 0)
-  if s:enableDynUpdate
-    call s:DynUpdate('w', expand("<abuf>") + 0, 0)
+  if s:enableDynUpdate && s:showDetails
+    call s:DynUpdate('u', bufnr('#') + 0, 0)
   endif
 endfunction
 
-function! s:BufDelete()
+function! s:BufWinLeave()
   if s:enableDynUpdate
-    call s:DynUpdate('d', expand("<abuf>") + 0, 0)
+    call s:DynUpdate('u', expand("<abuf>") + 0, 1)
+  endif
+endfunction
+
+function! s:BufWipeout()
+  call s:BufDeleteImpl('w', 1)
+endfunction
+
+function! s:BufDelete()
+  "if s:enableDynUpdate
+  "  call s:DynUpdate('d', expand("<abuf>") + 0, 0)
+  "endif
+  call s:BufDeleteImpl('d', 0)
+endfunction
+
+function! s:BufDeleteImpl(event, wipeOut)
+  let bufNr = expand("<abuf>") + 0
+  if a:wipeOut
+    call s:DelFromMRU(bufNr)
+  endif
+  if s:enableDynUpdate
+    let len = (s:showPaths == 2) ? strlen(s:FileName(bufNr)) : -1
+    " Optimization: Pass 0 for ovrrdDelayDynUpdate only when the next call is
+    "   not going to happen.
+    call s:DynUpdate(a:event, bufNr,
+          \ (len == s:curBufNameLen && s:showPaths == 2) ? 1 : 0)
+    if len == s:curBufNameLen && s:showPaths == 2
+      call s:DynUpdate('I', bufNr, 0) " Let s:curBufNameLen be recalculated.
+    endif
   endif
 endfunction
 
@@ -648,8 +758,16 @@ function! s:BufNew()
 endfunction
 
 function! s:BufAdd()
+  let bufNr = expand("<abuf>") + 0
   if s:enableDynUpdate
-    call s:DynUpdate('c', expand("<abuf>") + 0, 0)
+    let len = (s:showPaths == 2) ? strlen(s:FileName(bufNr)) : -1
+    " Ignore non-file buffers.
+    if !s:IgnoreBuf(bufNr)
+      if len > s:curBufNameLen
+        call s:DynUpdate('i', bufNr, 1)
+      endif
+      call s:DynUpdate('c', bufNr, 0)
+    endif
   endif
 endfunction
 " Event handlers }}}
@@ -660,12 +778,12 @@ endfunction
 
 " Add/Remove buffer/indicators numbers {{{
 function! s:RemoveBufNumbers()
-  let s:bufList = s:RemoveColumn(1)
+  let s:bufList = s:RemoveColumn(1, 5, 1)
 endfunction " RemoveBufNumbers
 
 
 function! s:AddBufNumbers()
-  call s:AddColumn(1, s:bufList)
+  call s:AddColumn(0, s:bufList)
 endfunction " AddBufNumbers
 
 "function! s:RemoveIndicators()
@@ -677,150 +795,168 @@ endfunction " AddBufNumbers
 "  call s:AddColumn(2, s:indList)
 "endfunction " AddIndicators
 
-function! s:RemoveColumn(colNum)
+function! s:RemoveColumn(colPos, colWidth, collect)
   if line("$") == s:headerSize
     return
   endif
   0
   call search('^"= ', "w")
   +
-  let _unnamed = @"
-  let _z = @z
-  setlocal modifiable
-  " Position correctly.
-  exec "normal! 0"
-  let colNum = a:colNum
-  if s:hideBufNums && colNum > 1
-    let colNum = colNum - 1
+  if a:collect
+    let _unnamed = @"
+    let _z = @z
   endif
-  if colNum != 1
-    "let oldvcol = virtcol('.')
-    " TODO: Doesn't work for last column, but not required right now.
-    silent! exec "normal! " . (colNum - 1) . "f\<Tab>l"
-  endif
-  silent! exec "normal! \<C-V>Gf\<Tab>\"zd"
-  setlocal nomodifiable
-  let block = @z
-  let @z = _z
-  let @" = _unnamed
+  let block = ''
+  let _sol = &startofline
+  try
+    setlocal modifiable
+    set nostartofline
+    exec "normal ".a:colPos."|" | " Position correctly.
+    silent! exec "normal! \<C-V>G".(a:colWidth-1)."l\"".(a:collect?'z':'_').'d'
+  finally
+    setlocal nomodifiable
+    let  &startofline = _sol
+    if a:collect
+      let block = @z
+      let @z = _z
+      let @" = _unnamed
+    endif
+  endtry
   return block
 endfunction " RemoveColumn
 
-function! s:AddColumn(colNum, block)
+function! s:AddColumn(colPos, block)
   if line("$") == s:headerSize || a:block == ""
     return
   endif
   let _unnamed = @"
   let _z = @z
-  setlocal modifiable
-  silent! $put =a:block
-  silent! exec "normal! \<C-V>G$\"zyu"
-  0
-  call search('^"= ', "w")
-  +
-  exec "normal! 0"
-  let colNum = a:colNum
-  if s:hideBufNums && colNum > 1
-    let colNum = colNum - 1
-  endif
-  if colNum == 1
-    exec "normal! P"
-  else
-    silent! exec "normal! " . (colNum - 1) . "f\<Tab>p"
-  endif
-  setlocal nomodifiable
-  let @z = _z
-  let @" = _unnamed
+  let _undolevels = &undolevels
+  try
+    set undolevels=1 " Make sure there is at least one level.
+    setlocal modifiable
+    silent! $put =a:block
+    silent! exec "normal! \<C-V>G$\"zyu"
+    0
+    call search('^"= ', "w")
+    +
+    exec "normal ".a:colPos."|" | " Position correctly.
+    if a:colPos == 0
+      normal! P
+    else
+      normal! p
+    endif
+  finally
+    setlocal nomodifiable
+    let @z = _z
+    let @" = _unnamed
+    let &undolevels = _undolevels
+  endtry
 endfunction " AddColumn
 " Add/Remove buffer/indicators numbers }}}
 
-
 " GetBufLine {{{
-function! s:GetBufLine(bufNum, ...)
+function! s:GetBufLine(bufNum)
   if a:bufNum == -1
     return ""
   endif
   let newLine = ""
-  let newLine = newLine . a:bufNum . "\t"
+  let newLine = newLine . strpart(a:bufNum."    ", 0, 5)
   " If user wants to see more details.
-  if s:showDetails || a:0
-    if !buflisted(a:bufNum)
-      let newLine = newLine . "u"
-    else
-      let newLine = newLine . " "
-    endif
-
-    " Alternate buffer is more reliable than current when switching windows
-    " (BufWinLeave comes first and the # buffer is already changed by then,
-    " not the % buffer).
-    if s:originalAltBuffer == a:bufNum
-      let newLine = newLine . "#"
-    elseif s:originalCurBuffer == a:bufNum
-      let newLine = newLine . "%"
-    else
-      let newLine = newLine . " "
-    endif
-
-    if bufloaded(a:bufNum)
-      if bufwinnr(a:bufNum) != -1
-	" Active buffer.
-	let newLine = newLine . "a"
-      else
-	let newLine = newLine . "h"
-      endif
-    else
-      let newLine = newLine . " "
-    endif
-
-    " Special case for "my" buffer as I am finally going to be
-    "  non-modifiable, anyway.
-    if getbufvar(a:bufNum, "&modifiable") == 0 || s:myBufNum == a:bufNum
-      let newLine = newLine . "-"
-    elseif getbufvar(a:bufNum, "&readonly") == 1
-      let newLine = newLine . "="
-    else
-      let newLine = newLine . " "
-    endif
-
-    " Special case for "my" buffer as I am finally going to be
-    "  non-modified, anyway.
-    if getbufvar(a:bufNum, "&modified") == 1 && a:bufNum != s:myBufNum
-      let newLine = newLine . "+"
-    else
-      let newLine = newLine . " "
-    endif
-    let newLine = newLine . "\t"
+  if s:showDetails
+    let newLine = newLine . s:GetBufIndicators(a:bufNum)
   endif
-  if s:showPaths || a:0
-    let bufName = bufname(a:bufNum)
+  if s:showPaths
+    if s:showPaths == 2
+      let bufName = s:FileName(a:bufNum)
+      let path = expand('#'.a:bufNum.':p:h')
+      let bufName = bufName . GetSpacer(s:curBufNameLen - strlen(bufName) + 1) .
+            \ s:TrimPath(path)
+    else
+      let bufName = s:TrimPath(s:BufName(a:bufNum))
+    endif
   else
-    " TODO: expand('#'.a:bufNum.':t') also works here, have to check which is
-    " better.
-    let bufName = fnamemodify(bufname(a:bufNum), ":t")
-  endif
-  if bufName == ""
-    let bufName = "[No File]"
+    let bufName = s:FileName(a:bufNum)
   endif
   let newLine = newLine . bufName
   return newLine
 endfunction
+
+function! s:GetBufIndicators(bufNum)
+  let bufInd = ''
+  if !buflisted(a:bufNum)
+    let bufInd = bufInd . "u"
+  else
+    let bufInd = bufInd . " "
+  endif
+
+  " Alternate buffer is more reliable than current when switching windows
+  " (BufWinLeave comes first and the # buffer is already changed by then,
+  " not the % buffer).
+  if s:originalAltBuffer == a:bufNum
+    let bufInd = bufInd . "#"
+  elseif s:originalCurBuffer == a:bufNum
+    let bufInd = bufInd . "%"
+  else
+    let bufInd = bufInd . " "
+  endif
+
+  if bufloaded(a:bufNum)
+    if bufwinnr(a:bufNum) != -1
+      " Active buffer.
+      let bufInd = bufInd . "a"
+    else
+      let bufInd = bufInd . "h"
+    endif
+  else
+    let bufInd = bufInd . " "
+  endif
+
+  " Special case for "my" buffer as I am finally going to be
+  "  non-modifiable, anyway.
+  if getbufvar(a:bufNum, "&modifiable") == 0 || s:myBufNum == a:bufNum
+    let bufInd = bufInd . "-"
+  elseif getbufvar(a:bufNum, "&readonly") == 1
+    let bufInd = bufInd . "="
+  else
+    let bufInd = bufInd . " "
+  endif
+
+  " Special case for "my" buffer as I am finally going to be
+  "  non-modified, anyway.
+  if getbufvar(a:bufNum, "&modified") == 1 && a:bufNum != s:myBufNum
+    let bufInd = bufInd . "+"
+  else
+    let bufInd = bufInd . " "
+  endif
+  let bufInd = bufInd . " "
+
+  return bufInd
+endfunction
+
+function! s:TrimPath(path)
+  let path = a:path
+  if s:displayMaxPath > 0 && strlen(path) > s:displayMaxPath
+    let path = '...'.strpart(path, strlen(path) - s:displayMaxPath + 3)
+  endif
+  return path
+endfunction
 " GetBufLine }}}
 
-
 function! s:SelectCurrentBuffer(openMode) " {{{
-  if search("^\"= ", "W") != 0
+  if search('^"= ', "W") != 0
     +
     return
   endif
 
-  let selBufNum = s:GetCurrentBufferNumber()
+  let selBufNum = SBCurBufNumber()
   if selBufNum == -1
     +
     return
   endif
 
   " If running under WinManager, let it open the file.
-  if s:opMode == 'WinManager'
+  if s:opMode ==# 'WinManager'
     call WinManagerFileEdit(selBufNum, a:openMode)
     return
   endif
@@ -828,7 +964,11 @@ function! s:SelectCurrentBuffer(openMode) " {{{
   let didQuit = 0
   if a:openMode == 2
     " Behaves temporarily like "keep"
+    let prevWin = winnr()
     wincmd p
+    if prevWin == winnr() " Only one window exists.
+      split
+    endif
   elseif a:openMode == 1
     " We will just skip calling Quit() here, because we will change to the
     " selected buffer anyway soon.
@@ -839,7 +979,7 @@ function! s:SelectCurrentBuffer(openMode) " {{{
 
   " If we are not quitting the window, then there is no point trying to restore
   "   the window settings.
-  if ! didQuit && s:browserMode == "split"
+  if ! didQuit && s:browserMode ==# "split"
     call RemoveNotifyWindowClose(s:windowName)
     call ResetWindowSettings2(s:myScriptId)
   endif
@@ -860,10 +1000,12 @@ function! s:SelectCurrentBuffer(openMode) " {{{
   endif
 endfunction " SelectCurrentBuffer }}}
 
-
 " Buffer Deletions {{{
-function! s:DeleteBuffers(wipeout) range
-  if s:opMode == 'WinManager'
+let s:deleteMsg = ''
+function! s:DeleteSelBuffers(wipeout) range
+  if s:opMode ==# 'WinManager'
+    " Otherwise, WinManager would try to refresh us multiple times, once for
+    "   each buffer deleted.
     call WinManagerSuspendAUs()
   endif
 
@@ -873,12 +1015,28 @@ function! s:DeleteBuffers(wipeout) range
 
   call SaveHardPosition('DeleteBuffers')
 
-  if a:firstline == 0 || a:lastline == 0
-    let a:firstline = line(".")
-    let a:lastline = line(".")
-  endif
+  try
+    if s:MultiSelectExists()
+      exec 'MSExecCmd call '.s:myScriptId.'DeleteBuffers("'.a:wipeout.'")'
+      MSClear
+    else
+      exec a:firstline.','.a:lastline.'call s:DeleteBuffers(a:wipeout)'
+    endif
+  finally
+    redraw | echo s:deleteMsg
+    "call input(s:deleteMsg)
+    let s:deleteMsg = ''
+  endtry
 
-  let line = a:firstline
+  call RestoreHardPosition('DeleteBuffers')
+  call ResetHardPosition('DeleteBuffers')
+
+  if s:opMode ==# 'WinManager'
+    call WinManagerResumeAUs()
+  endif
+endfunction
+
+function! s:DeleteBuffers(wipeout) range
   let nDeleted = 0
   let nUndeleted = 0
   let nWipedout = 0
@@ -886,68 +1044,72 @@ function! s:DeleteBuffers(wipeout) range
   let undeletedMsg = ""
   let wipedoutMsg = ""
   call s:SuspendAutoUpdates('DeleteBuffers')
-  setlocal modifiable
-  silent! execute line
-  while line <= a:lastline
-    let selectedBufNum = s:GetCurrentBufferNumber()
-    if selectedBufNum != -1
-      if a:wipeout
-        exec "bwipeout" selectedBufNum
-        let nWipedout = nWipedout + 1
-        let wipedoutMsg = wipedoutMsg . " " . selectedBufNum
-	silent! delete _
-      elseif buflisted(selectedBufNum)
-        exec "bdelete" selectedBufNum
-        if ! s:showHidden
-	  silent! delete _
+  let maxBufNameLenBuf = -1
+  try
+    setlocal modifiable
+    let line = a:firstline
+    silent! execute line
+    while line <= a:lastline
+      let selectedBufNum = SBCurBufNumber()
+      if selectedBufNum != -1
+        if a:wipeout
+          if maxBufNameLenBuf == -1 &&
+                \ strlen(s:FileName(selectedBufNum)) == s:curBufNameLen
+            let maxBufNameLenBuf = selectedBufNum
+          endif
+          exec "bwipeout" selectedBufNum
+          let nWipedout = nWipedout + 1
+          let wipedoutMsg = wipedoutMsg . " " . selectedBufNum
+          silent! delete _
+        elseif buflisted(selectedBufNum)
+          exec "bdelete" selectedBufNum
+          if ! s:showHidden
+            silent! delete _
+          else
+            call setline('.', s:GetBufLine(selectedBufNum))
+            silent! +
+          endif
+          let nDeleted = nDeleted + 1
+          let deletedMsg = deletedMsg . " " . selectedBufNum
         else
-	  call setline('.', s:GetBufLine(selectedBufNum))
-	  silent! +
+          " Undelete buffer.
+          call setbufvar(selectedBufNum, "&buflisted", "1")
+          call setline('.', s:GetBufLine(selectedBufNum))
+          silent! +
+          let nUndeleted = nUndeleted + 1
+          let undeletedMsg = undeletedMsg . " " . selectedBufNum
         endif
-        let nDeleted = nDeleted + 1
-        let deletedMsg = deletedMsg . " " . selectedBufNum
-      else
-        " Undelete buffer.
-        call setbufvar(selectedBufNum, "&buflisted", "1")
-        call setline('.', s:GetBufLine(selectedBufNum))
-	silent! +
-        let nUndeleted = nUndeleted + 1
-        let undeletedMsg = undeletedMsg . " " . selectedBufNum
       endif
+      let line = line + 1
+    endwhile
+  finally
+    call s:ResumeAutoUpdates()
+    " Let the max length be recalculated.
+    if (nDeleted + nWipedout) > 0
+      call s:DynUpdate('l', 0, 0)
     endif
-    let line = line + 1
-  endwhile
-  call s:ResumeAutoUpdates()
+    if s:hideBufNums
+      call s:RemoveBufNumbers()
+    endif
+  endtry
+  if maxBufNameLenBuf != -1
+    call s:DynUpdate('I', maxBufNameLenBuf, 0)
+  endif
   setlocal nomodifiable
 
-  let msg = ""
   if nWipedout > 0
-    let msg = msg . s:GetDeleteMsg(nWipedout, wipedoutMsg)
-    let msg = msg . " wiped out.\n"
+    let s:deleteMsg = s:deleteMsg . s:GetDeleteMsg(nWipedout, wipedoutMsg)
+    let s:deleteMsg = s:deleteMsg . " wiped out.\n"
   endif
   if nDeleted > 0
-    let msg = msg . s:GetDeleteMsg(nDeleted, deletedMsg)
-    let msg = msg . " deleted (unlisted).\n"
+    let s:deleteMsg = s:deleteMsg . s:GetDeleteMsg(nDeleted, deletedMsg)
+    let s:deleteMsg = s:deleteMsg . " deleted (unlisted).\n"
   endif
   if nUndeleted > 0
-    let msg = msg . s:GetDeleteMsg(nUndeleted, undeletedMsg)
-    let msg = msg . " undeleted (listed).\n"
-  endif
-
-  if s:hideBufNums
-    call s:RemoveBufNumbers()
-  endif
-
-  call RestoreHardPosition('DeleteBuffers')
-
-  redraw | echo msg
-  "call input(msg)
-
-  if s:opMode == 'WinManager'
-    call WinManagerResumeAUs()
+    let s:deleteMsg = s:deleteMsg . s:GetDeleteMsg(nUndeleted, undeletedMsg)
+    let s:deleteMsg = s:deleteMsg . " undeleted (listed).\n"
   endif
 endfunction " DeleteBuffers
-
 
 function! s:GetDeleteMsg(nBufs, msg)
   let msg = a:nBufs . ((a:nBufs > 1) ? " buffers: " : " buffer: ") .
@@ -955,6 +1117,43 @@ function! s:GetDeleteMsg(nBufs, msg)
   return msg
 endfunction
 " Buffer Deletions }}}
+
+function! s:ExecFileCmdOnSelection(cmd) range " {{{
+  if s:hideBufNums
+    call s:AddBufNumbers()
+  endif
+  call SaveHardPosition('ExecFileCmdOnSelection')
+
+  try
+    let ind = match(a:cmd, '%\@<!\%(%%\)*\zs%[sn]')
+    if ind != -1
+      let cmdPre = substitute(strpart(a:cmd, 0, ind), '%%', '%', 'g')
+      let cmdPost = substitute(strpart(a:cmd, ind+2), '%%', '%', 'g')
+    else
+      let cmdPre = substitute(a:cmd, '%%', '%', 'g').' '
+      let cmdPost = ''
+    endif
+    if ind != -1 && a:cmd[ind+1] == 'n'
+      let bufList = SBSelectedBufNums(a:firstline, a:lastline)
+    else
+      let bufList = SBSelectedBuffers(a:firstline, a:lastline)
+    endif
+    if bufList != ''
+      let cmd = escape(cmdPre.bufList.cmdPost, '%')
+      redraw | echo cmd
+      exec cmd
+      MSClear
+    endif
+  finally
+    call s:ResumeAutoUpdates()
+    if s:hideBufNums
+      call s:RemoveBufNumbers()
+    endif
+
+    call RestoreHardPosition('ExecFileCmdOnSelection')
+    call ResetHardPosition('ExecFileCmdOnSelection')
+  endtry
+endfunction " }}}
 
 " Buffer line operations }}}
 
@@ -966,7 +1165,7 @@ function! s:SetupBuf() " {{{
   setlocal noreadonly " Or it shows [RO] after the buffer name, not nice.
   setlocal nowrap
   setlocal nonumber
-  setlocal foldcolumn=0
+  setlocal foldcolumn=0 nofoldenable
   setlocal tabstop=8
   if s:enableDynUpdate
     setlocal bufhidden=hide
@@ -986,49 +1185,7 @@ function! s:SetupBuf() " {{{
         \ " :call <SID>AutoUpdateBuffers(0)"
   aug END
 
-  " Start syntax rules. {{{
-  "" 
-
-  " Do only if they are not already done, may save some time.
-  "if hlID("SelBufMapping") == 0
-
-  " The mappings in the help header.
-  syn match SelBufMapping "\s\(\i\|[ /<>-]\)\+ : " contained
-  syn match SelBufHelpLine "^\" .*$" contains=SelBufMapping
-
-  " The starting line. Summary of current settings.
-  syn keyword SelBufKeyWords Sorting showDetails showHidden showDirs showPaths bufNameOnly hideBufNums contained
-  syn region SelBufKeyValues start=+=+ end=+,+ end=+$+ skip=+ + contained
-  syn match SelBufKeyValuePair +\i\+=\i\++ contained contains=SelBufKeyWords,SelBufKeyValues
-  syn match SelBufSummary "^\"= .*$" contains=SelBufKeyValuePair
-
-  syn match SelBufBufLine "^[^"].*$" contains=SelBufBufNumber,SelBufBufIndicators,SelBufBufName
-  syn match SelBufBufNumber "^\d\+" contained
-  syn match SelBufBufIndicators "\t[^\t]*\t" contained
-  if s:highlightOnlyFilename
-    syn match SelBufBufName "\([^/\\\t]\{-1,}\)$" contained
-  else
-    syn match SelBufBufName "\(\p\| \)*$" contained
-  endif
-
-
-  hi def link SelBufHelpLine      Comment
-  hi def link SelBufMapping       Special
-
-  hi def link SelBufSummary       Statement
-  hi def link SelBufKeyWords      Keyword
-  hi def link SelBufKeyValues     Constant
-
-  hi def link SelBufBufNumber     Constant
-  hi def link SelBufBufIndicators Label
-  hi def link SelBufBufName       Directory
-
-  hi def link SelBufSummary       Special
-
-  "endif
-
-  "
-  " End Syntax rules. }}}
+  call s:SetupSyntax()
 
   " Maps {{{
   call s:DefMap("n", "SelectKey", "<CR>", ":SBSelect<CR>")
@@ -1039,26 +1196,27 @@ function! s:SetupBuf() " {{{
   call s:DefMap("n", "WipeOutKey", "D", ":SBWipeout<CR>")
   call s:DefMap("v", "DeleteKey", "d", ":SBDelete<CR>")
   call s:DefMap("v", "WipeOutKey", "D", ":SBWipeout<CR>")
-  call s:DefMap("n", "TDetailsKey", "i", ":SBTDetails<CR>")
-  call s:DefMap("n", "THiddenKey", "u", ":SBTHidden<CR>")
-  call s:DefMap("n", "TBufNumsKey", "p", ":SBTBufNums<CR>")
-  call s:DefMap("n", "THidePathsKey", "P", ":SBTPaths<CR>")
   call s:DefMap("n", "RefreshKey", "R", ":SBRefresh<CR>")
   call s:DefMap("n", "SortSelectFKey", "s", ":SBFSort<cr>")
   call s:DefMap("n", "SortSelectBKey", "S", ":SBBSort<cr>")
   call s:DefMap("n", "SortRevKey", "r", ":SBRSort<cr>")
   call s:DefMap("n", "QuitKey", "q", ":SBQuit<CR>")
-  call s:DefMap("n", "THelpKey", "?", ":SBTHelp<CR>")
   call s:DefMap("n", "ShowSummaryKey", "<C-G>", ":SBSummary<CR>")
+  call s:DefMap("n", "LaunchKey", "A", ":SBLaunch<CR>")
+  call s:DefMap("n", "TDetailsKey", "i", ":SBTDetails<CR>")
+  call s:DefMap("n", "THiddenKey", "u", ":SBTHidden<CR>")
+  call s:DefMap("n", "TBufNumsKey", "p", ":SBTBufNums<CR>")
+  call s:DefMap("n", "THidePathsKey", "P", ":SBTPaths<CR>")
+  call s:DefMap("n", "THelpKey", "?", ":SBTHelp<CR>")
 
   if ! s:disableSummary
-    nnoremap <silent> <buffer> j j:call <SID>EchoCurrentBufferName()<CR>
-    nnoremap <silent> <buffer> k k:call <SID>EchoCurrentBufferName()<CR>
-    nnoremap <silent> <buffer> <Up> <Up>:call <SID>EchoCurrentBufferName()<CR>
+    nnoremap <silent> <buffer> j j:call <SID>EchoBufSummary(0)<CR>
+    nnoremap <silent> <buffer> k k:call <SID>EchoBufSummary(0)<CR>
+    nnoremap <silent> <buffer> <Up> <Up>:call <SID>EchoBufSummary(0)<CR>
     nnoremap <silent> <buffer> <Down>
-	  \ <Down>:call <SID>EchoCurrentBufferName()<CR>
+	  \ <Down>:call <SID>EchoBufSummary(0)<CR>
     nnoremap <silent> <buffer> <LeftMouse>
-	  \ <LeftMouse>:call <SID>EchoCurrentBufferName()<CR>
+	  \ <LeftMouse>:call <SID>EchoBufSummary(0)<CR>
   else
     let _errmsg = v:errmsg
     silent! nunmap <buffer> j
@@ -1074,39 +1232,95 @@ function! s:SetupBuf() " {{{
   " Toggle the same key to mean "Close".
   nnoremap <buffer> <silent> <Plug>SelectBuf :call <SID>Quit(0)<CR>
 
+  command! -nargs=1 -buffer -complete=command -range SBExec
+        \ :<line1>,<line2>call <SID>ExecFileCmdOnSelection(<q-args>)
+
   " Define some local command too for the ease of debugging.
+  command! -nargs=0 -buffer SBS :SBSettings
   command! -nargs=0 -buffer SBSelect :call <SID>SelectCurrentBuffer(0)
   command! -nargs=0 -buffer SBOpen :call <SID>SelectCurrentBuffer(2)
   command! -nargs=0 -buffer SBWSelect :call <SID>SelectCurrentBuffer(1)
-  command! -nargs=0 -buffer -range SBDelete :<line1>,<line2>call <SID>DeleteBuffers(0)
-  command! -nargs=0 -buffer -range SBWipeout :<line1>,<line2>call <SID>DeleteBuffers(1)
+  command! -nargs=0 -buffer SBQuit :call <SID>Quit(0)
+  command! -nargs=0 -buffer -range SBDelete
+        \ :<line1>,<line2>call <SID>DeleteSelBuffers(0)
+  command! -nargs=0 -buffer -range SBWipeout
+        \ :<line1>,<line2>call <SID>DeleteSelBuffers(1)
+  command! -nargs=0 -buffer SBRefresh :call <SID>UpdateBuffers(1)
+  command! -nargs=0 -buffer SBSummary :call s:EchoBufSummary(1)
   command! -nargs=0 -buffer SBFSort :call <SID>SortSelect(1)
   command! -nargs=0 -buffer SBBSort :call <SID>SortSelect(-1)
   command! -nargs=0 -buffer SBRSort :call <SID>SortReverse()
-  command! -nargs=0 -buffer SBQuit :call <SID>Quit(0)
-  command! -nargs=0 -buffer SBTHelp :call <SID>ToggleHelpHeader()
   command! -nargs=0 -buffer SBTBufNums :call <SID>ToggleHideBufNums()
-  command! -nargs=0 -buffer SBTHidden :call <SID>ToggleHidden()
   command! -nargs=0 -buffer SBTDetails :call <SID>ToggleDetails()
+  command! -nargs=0 -buffer SBTHelp :call <SID>ToggleHelpHeader()
+  command! -nargs=0 -buffer SBTHidden :call <SID>ToggleHidden()
   command! -nargs=0 -buffer SBTPaths :call <SID>ToggleHidePaths()
-  command! -nargs=0 -buffer SBRefresh :call <SID>UpdateBuffers(1)
-  command! -nargs=0 -buffer SBSummary :echohl SelBufSummary |
-	\ echo <SID>GetBufLine(<SID>GetCurrentBufferNumber(), 1) |
-	\ echohl NONE
   " Commands }}} 
 endfunction " SetupBuf }}}
 
+function! s:SetupSyntax() " {{{
+  set ft=selectbuf
+
+  " The mappings in the help header.
+  syn match SelBufMapping "\s\(\i\|[ /<>-]\)\+ : " contained
+  syn match SelBufHelpLine "^\" .*$" contains=SelBufMapping
+
+  " The starting line. Summary of current settings.
+  syn keyword SelBufKeyWords Sorting showDetails showHidden showDirs showPaths bufNameOnly hideBufNums contained
+  syn region SelBufKeyValues start=+=+ end=+,+ end=+$+ skip=+ + contained
+  syn match SelBufKeyValuePair +\i\+=\i\++ contained contains=SelBufKeyWords,SelBufKeyValues
+  syn match SelBufSummary "^\"= .*$" contains=SelBufKeyValuePair
+
+  syn match SelBufBufLine "^[^"].*$" contains=SelBufBufNumber,SelBufBufIndicators,SelBufBufName,@SelBufLineAdd
+  syn match SelBufBufNumber "^\d\+" contained
+  if s:hideBufNums
+    if s:showDetails
+      syn match SelBufBufIndicators "\%(^\)\@<=....." contained contains=@SelBufIndAdd
+      syn match SelBufBufName "\%(^.....\)\@<=\(\p\| \)*" contains=SelBufPath,@SelBufBufAdd contained
+    else
+      syn match SelBufBufName "^\(\p\| \)*" contains=SelBufPath,@SelBufBufAdd contained
+    endif
+  else
+    if s:showDetails
+      " CAUTION: Five dots because that is the width of the buf number column.
+      syn match SelBufBufIndicators "\%(^.....\)\@<=....." contained contains=@SelBufIndAdd
+      syn match SelBufBufName "\%(^..........\)\@<=\(\p\| \)*" contains=SelBufPath,@SelBufBufAdd contained
+    else
+      syn match SelBufBufName "\%(^.....\)\@<=\(\p\| \)*" contains=SelBufPath,@SelBufBufAdd contained
+    endif
+  endif
+  if s:showPaths == 2
+    let pathStartCol = s:curBufNameLen + 2 + (!s:hideBufNums) * 5 +
+          \ (s:showDetails>0) * 5
+    exec 'syn match SelBufPath "\%'.pathStartCol.'c\(\p\| \)*$" contained contains=@SelBufPathAdd'
+  endif
+
+
+  hi def link SelBufHelpLine      Comment
+  hi def link SelBufMapping       Special
+
+  hi def link SelBufSummary       Statement
+  hi def link SelBufKeyWords      Keyword
+  hi def link SelBufKeyValues     Constant
+
+  hi def link SelBufBufNumber     Constant
+  hi def link SelBufBufIndicators Label
+  hi def link SelBufBufName       Directory
+  hi def link SelBufPath          Identifier
+
+  hi def link SelBufSummary       Special
+endfunction " }}}
 
 " Routing browser quit through this function gives a chance to decide how to
 "   do the exit.
-" Returns 1 when the browser window is really quit. 
+" Returns 1 when the browser window could be successfully closed.
 function! s:Quit(scriptOrigin) " {{{
   " When the browser should be left open, switch to the previously used window
   "   instead of quitting the window.
   " The user can still use :q commnad to force a quit.
-  if s:opMode == 'WinManager' || s:browserMode == 'keep'
+  if s:opMode ==# 'WinManager' || s:browserMode ==# 'keep'
     " Switch to the most recently used window.
-    if s:opMode == 'WinManager'
+    if s:opMode ==# 'WinManager'
       let prevWin = bufwinnr(WinManagerGetLastEditedFile())
       if prevWin != -1
 	if s:quiteWinEnter " When previously entered using activation key.
@@ -1124,7 +1338,7 @@ function! s:Quit(scriptOrigin) " {{{
   let didQuit = 0
   " If opMode is empty or 'auto', the browser might have entered through some
   "   back-door mechanism. We don't want to exit the window in this case.
-  if s:browserMode == "switch" || s:opMode == 'auto' || s:opMode == ''
+  if s:browserMode ==# "switch" || s:opMode ==# 'auto' || s:opMode == ''
     " Switch browser even when the dynamic update is on, as it will allow us
     "	preserve the contents of the browser as we want.
     if ! a:scriptOrigin || s:enableDynUpdate
@@ -1156,7 +1370,6 @@ function! s:Quit(scriptOrigin) " {{{
   return didQuit
 endfunction " Quit }}}
 
-
 " This is the function that gets always called no matter how we do the exit
 "   from the browser, giving us a chance to do last minute cleanup.
 function! s:Done() " {{{
@@ -1168,21 +1381,19 @@ function! s:Done() " {{{
   let s:opMode = ''
 
   " Never cleanup when started by WinManager or in keep mode.
-  if s:opMode == 'WinManager' || s:browserMode == 'keep'
+  if s:opMode ==# 'WinManager' || s:browserMode ==# 'keep'
     return
   endif
 
   call s:RestoreSearchString()
 endfunction " Done }}}
 
-
 function! s:RestoreWindows(dummyTitle) " {{{
   " If user wants us to restore window sizes during the exit.
-  if s:restoreWindowSizes && s:browserMode != "keep"
+  if s:restoreWindowSizes && s:browserMode !=# "keep"
     call RestoreWindowSettings2(s:myScriptId)
   endif
 endfunction " }}}
-
 
 function! s:RestoreSearchString() " {{{
   if s:savedSearchString != ''
@@ -1192,7 +1403,6 @@ function! s:RestoreSearchString() " {{{
     call histadd("search", @/)
   endif
 endfunction " }}}
-
 
 function! s:DefMap(mapType, mapKeyName, defaultKey, cmdStr) " {{{
   let key = maparg('<Plug>SelBuf' . a:mapKeyName)
@@ -1208,7 +1418,6 @@ endfunction " DefMap " }}}
 
 " Utility methods. {{{
 "
-
 function! s:AdjustWindowSize() " {{{
   call SaveSoftPosition('AdjustWindowSize')
   " Set the window size to one more than just required.
@@ -1222,8 +1431,8 @@ function! s:AdjustWindowSize() " {{{
     exec "resize" . size
   endif
   call RestoreSoftPosition('AdjustWindowSize')
+  call ResetSoftPosition('AdjustWindowSize')
 endfunction " }}}
-
 
 " Suspend/Resume AUs{{{
 function! s:SuspendAutoUpdates(dbgTag)
@@ -1231,13 +1440,15 @@ function! s:SuspendAutoUpdates(dbgTag)
   if !exists("s:_lazyredraw")
     let s:auSuspended = 1
     let s:dbgSuspTag = a:dbgTag
-    if s:opMode == 'WinManager'
+    if s:opMode ==# 'WinManager'
       call WinManagerSuspendAUs()
     endif
     let s:_lazyredraw = &lazyredraw
     set lazyredraw
     let s:_report = &report
     set report=99999
+    let s:_undolevels = &undolevels
+    set undolevels=-1
   endif
 endfunction
 
@@ -1247,11 +1458,12 @@ function! s:ResumeAutoUpdates()
     let &report = s:_report
     let &lazyredraw = s:_lazyredraw
     unlet s:_lazyredraw
-    if s:opMode == 'WinManager'
+    if s:opMode ==# 'WinManager'
       call WinManagerResumeAUs()
     endif
     let s:auSuspended = 0
     let s:dbgSuspTag = ''
+    let &undolevels = s:_undolevels
   endif
 endfunction
 
@@ -1260,42 +1472,64 @@ function! s:AUSuspended()
 endfunction
 " }}}
 
-
-function! s:GetCurrentBufferNumber() " {{{
-  if s:hideBufNums
-    let bufIndex = line(".") - s:headerSize - 1
-    let bufNo = MvElementAt(s:bufList, "\t\n", bufIndex)
-    if bufNo == ""
-      return -1
-    else
-      return bufNo + 0
-    endif
-  else
-    return s:GetBufferNumber(getline("."))
-  endif
-endfunction " }}}
-
-
 function! s:GetBufferNumber(line) " {{{
   let bufNumber = matchstr(a:line, '^\d\+')
-  if bufNumber == ""
+  if bufNumber == ''
     return -1
   endif
   return bufNumber + 0 " Convert it to number type.
 endfunction " }}}
 
-
-function! s:EchoCurrentBufferName() " {{{
-  let bufNumber = s:GetCurrentBufferNumber()
+function! s:EchoBufSummary(detailed) " {{{
+  if !a:detailed && s:showPaths == 1 " There is nothing special to display here.
+    return
+  endif
+  let bufNumber = SBCurBufNumber()
   if bufNumber != -1
-    let bufName = expand('#'.bufNumber.':p')
-    if bufName == ''
-      let bufName = '[No File]'
-    endif
-    echohl SelBufSummary | echo "Buffer: " . bufName | echohl NONE
+    let _showPaths = s:showPaths | let s:showPaths = 1
+    let _showDetails = s:showDetails | let s:showDetails = (a:detailed?1:0)
+    let _hideBufNums = s:hideBufNums | let s:hideBufNums = (a:detailed?0:1)
+    let _displayMaxPath = s:displayMaxPath | let s:displayMaxPath = -1
+    let bufLine = ''
+    try
+      let bufLine = s:GetBufLine(bufNumber)
+      let bufLine = a:detailed ? bufLine :
+	    \ substitute(bufLine, '^\d\+\s\+', '', '')
+    finally
+      let s:showPaths = _showPaths
+      let s:showDetails = _showDetails
+      let s:hideBufNums = _hideBufNums
+      let s:displayMaxPath = _displayMaxPath
+    endtry
+    echohl SelBufSummary | echo (a:detailed ? '' : "Buffer: ") . bufLine .
+	  \ (a:detailed ? (' (Total: '.(line('$') - s:headerSize).')') : '') |
+	  \ echohl NONE
   endif
 endfunction " }}}
 
+function! s:LaunchBuffer(...) " {{{
+  if ! OnMS() && s:launcher == ''
+    return
+  endif
+  let args = ''
+  if a:0 == 0
+    let args = '#'.(bufnr('%') == s:myBufNum ? SBCurBufNumber() : bufnr('%')).
+          \    ':p'
+  else
+    let i = 1
+    while i <= a:0
+      let args = args . ' ' .
+            \ ((a:{i} !~# '^\d\+$') ?
+            \  (filereadable(a:{i}) ?
+            \   fnamemodify(a:{i}, ':p') : a:{i}) :
+            \  '#'.a:{i}.':p')
+      let i = i + 1
+    endwhile
+  endif
+  if args != -1 && args.'' != ''
+    exec 'silent! '.s:launcher args
+  endif
+endfunction " }}}
 
 " GoToBrowserWindow {{{
 " Place holder function for any future manipulation of window while taking
@@ -1311,13 +1545,13 @@ function! s:GoToBrowserWindow(browserWinNo)
       " If user wants us to save window sizes and restore them later.
       " But don't save unless "split" mode, as otherwise we are not creating a
       "   new window.
-      if s:restoreWindowSizes && s:browserMode == "split"
+      if s:restoreWindowSizes && s:browserMode ==# "split"
 	call SaveWindowSettings2(s:myScriptId, 1)
       endif
 
       " Don't split window for "switch" mode.
       let splitCommand = ""
-      if s:browserMode != "switch"
+      if s:browserMode !=# "switch"
 	" If user specified a split type, use that.
 	let splitCommand = splitCommand .  s:splitType
 	if s:useVerticalSplit
@@ -1337,10 +1571,17 @@ function! s:GoToBrowserWindow(browserWinNo)
 	" Create a new buffer.
 	" Temporarily modify isfname to avoid treating the name as a pattern.
 	let _isf = &isfname
-	set isfname-=\
-	set isfname-=[
-	exec ":e \\" . escape(s:windowName, ' ')
-	let &isfname = _isf
+	try
+	  set isfname-=\
+	  set isfname-=[
+	  if exists('+shellslash')
+	    exec ":e \\\\" . escape(s:windowName, ' ')
+	  else
+	    exec ":e \\" . escape(s:windowName, ' ')
+	  endif
+	finally
+	  let &isfname = _isf
+	endtry
 	let s:myBufNum = bufnr('%')
       endif
     endif
@@ -1350,9 +1591,12 @@ endfunction
 function! s:GoToWindow(winNr)
   if winnr() != a:winNr
     let _eventignore = &eventignore
-    set eventignore+=WinEnter,WinLeave
-    exec a:winNr . 'wincmd w'
-    let &eventignore = _eventignore
+    try
+      set eventignore+=WinEnter,WinLeave
+      exec a:winNr . 'wincmd w'
+    finally
+      let &eventignore = _eventignore
+    endtry
   endif
 endfunction
 " }}}
@@ -1366,9 +1610,8 @@ function! s:SBSettings() " {{{
     if exists("s:" . localVar)
       exec "let oldVal = s:" . localVar . " . '' "
     else
-      silent! exec "let oldVal = s:settingsMap{selectedSetting}"
-      if oldVal != ''
-	exec "let oldVal = s:" . oldVal . " . '' "
+      if exists("s:settingsMap" . selectedSetting)
+	exec "let oldVal = s:" . s:settingsMap{selectedSetting} . " . '' "
       else
 	echoerr "Internal error detected, couldn't locate value for " .
 	      \ selectedSetting
@@ -1376,7 +1619,7 @@ function! s:SBSettings() " {{{
     endif
     let newVal = input("Current value for " . selectedSetting . " is: " .
 	  \ oldVal . "\nEnter new value: ", oldVal)
-    if newVal != oldVal
+    if newVal !=# oldVal
       exec "let g:selBuf" . selectedSetting . " = '" . newVal . "'"
       call s:Initialize()
     endif
@@ -1403,7 +1646,6 @@ function! s:FindAndMarkNextBuffer(marker, inc) " {{{
   endif
 endfunction " }}}
 
-
 "" START: Toggle methods {{{
 
 function! s:ToggleHelpHeader()
@@ -1419,24 +1661,57 @@ endfunction
 
 
 function! s:ToggleDetails()
-  "if ! s:showDetails && s:indList == ""
-    let s:showDetails = ! s:showDetails
-    call s:UpdateBuffers(1)
-  "else
-  "  if s:showDetails
-  "    call s:RemoveIndicators()
-  "  else
-  "    call s:AddIndicators()
-  "  endif
-  "  let s:showDetails = ! s:showDetails
-  "  call s:UpdateHeader()
-  "endif
+  "let s:showDetails = ! s:showDetails
+  "call s:UpdateBuffers(1)
+  call SaveSoftPosition('ToggleDetails')
+  if s:showDetails
+    call s:RemoveColumn((!s:hideBufNums) * 5 + 1, 6, 0)
+  else
+    if s:hideBufNums
+      call s:AddBufNumbers()
+    endif
+    if search('^"= ', "w")
+      let _search = @/
+      setlocal modifiable
+      try
+        let @/ = '\%6c'
+        silent! +,$s//\=s:GetBufIndicators(SBCurBufNumber())/
+      finally
+        let @/ = _search
+        setlocal nomodifiable
+      endtry
+    endif
+    if s:hideBufNums
+      call s:RemoveBufNumbers()
+    endif
+  endif
+  let s:showDetails = ! s:showDetails
+  call s:UpdateHeader()
+  call s:SetupSyntax()
+  call RestoreSoftPosition('ToggleDetails')
+  call ResetSoftPosition('ToggleDetails')
 endfunction
 
 
 function! s:ToggleHidden()
+  "let s:showHidden = ! s:showHidden
+  "call s:UpdateBuffers(1)
+  let i = 1
+  let recalcLength = 0
+  let lastBufNr = bufnr('$')
+  while i <= lastBufNr
+    if bufexists(i) && ! buflisted(i) && ! s:IgnoreBuf(i)
+      if ! recalcLength
+        call s:DynUpdate('l', 0, 1)
+        let recalcLength = 1
+      endif
+      call s:DynUpdate((s:showHidden ? 'd' : 'c'), i, 1)
+    endif
+    let i = i + 1
+  endwhile
   let s:showHidden = ! s:showHidden
-  call s:UpdateBuffers(1)
+  call s:UpdateHeader()
+  call s:ListBufs()
 endfunction
 
 
@@ -1450,16 +1725,21 @@ function! s:ToggleHideBufNums()
   let s:hideBufNums = ! s:hideBufNums
   call s:UpdateHeader()
   call RestoreHardPosition('ToggleHideBufNums')
+  call ResetHardPosition('ToggleHideBufNums')
+  call s:SetupSyntax()
 endfunction
 
 
 function! s:ToggleHidePaths()
-  let s:showPaths = ! s:showPaths
+  let s:showPaths = s:showPaths + 1
+  if s:showPaths > 2
+    let s:showPaths = 0
+  endif
   call s:UpdateBuffers(1)
+  call s:SetupSyntax()
 endfunction
 
 "" END: Toggle methods }}}
-
 
 " MRU support {{{
 function! s:PushToFrontInMRU(bufNum, updImm)
@@ -1467,13 +1747,13 @@ function! s:PushToFrontInMRU(bufNum, updImm)
   if a:bufNum == -1 || a:bufNum == s:myBufNum || s:disableMRUlisting
       return
   endif
-  if s:ignoreNonFileBufs && getbufvar(a:bufNum, '&buftype') != ''
+  if s:IgnoreBuf(a:bufNum)
     return
   endif
 
   let s:MRUlist = MvPushToFront(s:MRUlist, ',', a:bufNum)
   let g:MRUlist = s:MRUlist
-  if s:GetSortNameByType(s:sorttype) == 'mru'
+  if s:GetSortNameByType(s:sorttype) ==# 'mru'
     call s:DynUpdate('m', a:bufNum + 0, !a:updImm)
   else
     call s:DynUpdate('u', a:bufNum + 0, !a:updImm)
@@ -1484,13 +1764,13 @@ function! s:PushToBackInMRU(bufNum, updImm)
   if a:bufNum == -1 || a:bufNum == s:myBufNum || s:disableMRUlisting
     return
   endif
-  if s:ignoreNonFileBufs && getbufvar(a:bufNum, '&buftype') != ''
+  if s:IgnoreBuf(a:bufNum)
     return
   endif
 
   let s:MRUlist = MvPullToBack(s:MRUlist, ',', a:bufNum)
   let g:MRUlist = s:MRUlist
-  if s:GetSortNameByType(s:sorttype) == 'mru'
+  if s:GetSortNameByType(s:sorttype) ==# 'mru'
     call s:DynUpdate('m', a:bufNum + 0, !a:updImm)
   else
     call s:DynUpdate('u', a:bufNum + 0, !a:updImm)
@@ -1533,20 +1813,61 @@ function! s:NextBufInMRU()
 endfunction
 " MRU support }}}
 
-" Initialize with the bufers that might have been already loaded. This is
-"   required to show the buffers that are loaded by specifying them as
-"   command-line arguments (Reported by David Fishburn).
-if ! s:disableMRUlisting
+function! s:IgnoreBuf(bufNum) " {{{
+  if s:ignoreNonFileBufs && (getbufvar(a:bufNum, '&buftype') != '' ||
+        \ (bufname(a:bufNum)[0] ==# '[' && bufname(a:bufNum) =~# ']$'))
+    return 1
+  endif
+  return 0
+endfunction " }}}
+
+function! s:BufName(bufNum) " {{{
+  let bufName = bufname(a:bufNum)
+  if bufName == ""
+    let bufName = "[No File]"
+  endif
+  return bufName
+endfunction " }}}
+
+function! s:FileName(bufNum) " {{{
+  let fileName = expand('#'.a:bufNum.':p:t')
+  if fileName == ""
+    let fileName = "[No File]"
+  endif
+  return fileName
+endfunction " }}}
+
+function! s:CalcMaxBufNameLen(skipBuf, skipHidden) " {{{
   let i = 1
+  let maxBufNameLen = -1
   let lastBufNr = bufnr('$')
   while i <= lastBufNr
-    if s:ShouldShowBuffer(i)
-      let s:MRUlist = s:MRUlist . i . ','
-    endif
-    let i = i + 1
+    try
+      let fileName = s:FileName(i)
+      if bufexists(i) && !s:IgnoreBuf(i) && maxBufNameLen < strlen(fileName) &&
+            \ i != a:skipBuf
+        if !buflisted(i) && a:skipHidden
+          continue
+        endif
+        let maxBufNameLen = strlen(fileName)
+      endif
+    finally
+      let i = i + 1
+    endtry
   endwhile
-endif
-"
+  if maxBufNameLen < 9
+    let maxBufNameLen = 9 " Min length of '[No File]'
+  endif
+  return maxBufNameLen
+endfunction " }}}
+
+function! s:MultiSelectExists() " {{{
+  if exists('g:loaded_multiselect') && g:loaded_multiselect >= 100 && MSSelectionExists()
+    return 1
+  else
+    return 0
+  endif
+endfunction " }}}
 " Utility methods. }}}
 
 
@@ -1578,17 +1899,17 @@ endfunction
 function! s:GetSortTypeByName(sortname)
   if match(a:sortname, '\d') != -1
     return (a:sortname + 0)
-  elseif a:sortname == "number"
+  elseif a:sortname ==# "number"
     return 0
-  elseif a:sortname == "name"
+  elseif a:sortname ==# "name"
     return 1
-  elseif a:sortname == "path"
+  elseif a:sortname ==# "path"
     return 2
-  elseif a:sortname == "type"
+  elseif a:sortname ==# "type"
     return 3
-  elseif a:sortname == "indicators"
+  elseif a:sortname ==# "indicators"
     return 4
-  elseif a:sortname == "mru"
+  elseif a:sortname ==# "mru"
     return 5
   else
     return -1
@@ -1620,12 +1941,12 @@ endfunction
 ""
 
 function! s:CmpByName(line1, line2, direction)
-  let name1 = substitute(a:line1, '^.*\t.\{-}\([^/\\]*$\)', '\1', '')
-  let name2 = substitute(a:line2, '^.*\t.\{-}\([^/\\]*$\)', '\1', '')
+  let name1 = expand('#'.s:GetBufferNumber(a:line1).':t')
+  let name2 = expand('#'.s:GetBufferNumber(a:line2).':t')
 
-  if name1 < name2
+  if (s:ignoreCaseInSort && name1 <? name2) || (name1 < name2)
     return -a:direction
-  elseif name1 > name2
+  elseif (s:ignoreCaseInSort && name1 >? name2) || (name1 > name2)
     return a:direction
   else
     return 0
@@ -1633,16 +1954,26 @@ function! s:CmpByName(line1, line2, direction)
 endfunction
 
 function! s:CmpByPath(line1, line2, direction)
-  let name1 = substitute(a:line1, '^.*\t', '', '')
-  let name2 = substitute(a:line2, '^.*\t', '', '')
+  if s:showPaths
+    if s:showPaths == 2
+      let name1 = strpart(a:line1, (s:showDetails?11:5)+s:curBufNameLen) .
+	    \ strpart(a:line1, (s:showDetails?11:5), s:curBufNameLen)
+      let name2 = strpart(a:line2, (s:showDetails?11:5)+s:curBufNameLen) .
+	    \ strpart(a:line2, (s:showDetails?11:5), s:curBufNameLen)
+    else
+      let name1 = strpart(a:line1, (s:showDetails?11:5))
+      let name2 = strpart(a:line2, (s:showDetails?11:5))
+    endif
 
-  if name1 < name2
-    return -a:direction
-  elseif name1 > name2
-    return a:direction
-  else
-    return 0
+    if (s:ignoreCaseInSort && name1 <? name2) ||
+          \ (!s:ignoreCaseInSort && name1 < name2)
+      return -a:direction
+    elseif (s:ignoreCaseInSort && name1 >? name2) ||
+          \ (!s:ignoreCaseInSort && name1 > name2)
+      return a:direction
+    endif
   endif
+  return 0
 endfunction
 
 function! s:CmpByNumber(line1, line2, direction)
@@ -1660,12 +1991,8 @@ endfunction
 
 function! s:CmpByType(line1, line2, direction)
   " Establish the extensions.
-  "let type1 = matchstr(a:line1, '\.[^.]\+$')
-  "let type1 = strpart(type1, 1)
-  "let type2 = matchstr(a:line2, '\.[^.]\+$')
-  "let type2 = strpart(type2, 1)
-  let type1 = substitute(a:line1, '^.*\.\([^.]*\)', '\1', '')
-  let type2 = substitute(a:line2, '^.*\.\([^.]*\)', '\1', '')
+  let type1 = expand('#'.s:GetBufferNumber(a:line1).':e')
+  let type2 = expand('#'.s:GetBufferNumber(a:line2).':e')
 
   " If line1 doesn't have an extension
   if type1 == a:line1
@@ -1695,16 +2022,17 @@ function! s:CmpByType(line1, line2, direction)
 endfunction
 
 function! s:CmpByIndicators(line1, line2, direction)
-  let ind1 = substitute(a:line1, '^\d\+\t\+\([^\t]\+\)\t\+.*$', '\1', '')
-  let ind2 = substitute(a:line2, '^\d\+\t\+\([^\t]\+\)\t\+.*$', '\1', '')
+  if s:showDetails
+    let ind1 = matchstr(a:line1, '^.....\zs.....')
+    let ind2 = matchstr(a:line2, '^.....\zs.....')
 
-  if ind1 < ind2
-    return -a:direction
-  elseif ind1 > ind2
-    return a:direction
-  else
-    return 0
+    if ind1 < ind2
+      return -a:direction
+    elseif ind1 > ind2
+      return a:direction
+    endif
   endif
+  return 0
 endfunction
 
 
@@ -1756,14 +2084,15 @@ endfunction
 
 " Sort the file listing
 function! s:SortBuffers(bufNumsHidden)
-    " Save the line we start on so we can go back there when done
-    " sorting
-    call SaveSoftPosition('SortBuffers')
+  " Save the line we start on so we can go back there when done
+  " sorting
+  call SaveSoftPosition('SortBuffers')
 
-    if a:bufNumsHidden
-      call s:AddBufNumbers()
-    endif
+  if a:bufNumsHidden
+    call s:AddBufNumbers()
+  endif
 
+  try
     " Allow modification
     setlocal modifiable
     " Do the sort
@@ -1771,26 +2100,110 @@ function! s:SortBuffers(bufNumsHidden)
       silent! .+1,$call QSort(s:GetSortCmpFnByType(
 	    \ s:GetSortTypeByName(s:sorttype)), s:sortdirection)
     endif
+  finally
     " Disallow modification
     setlocal nomodifiable
+  endtry
 
-    " Update buffer-list again with the sorted list.
-    if a:bufNumsHidden
-      call s:RemoveBufNumbers()
-    endif
+  " Update buffer-list again with the sorted list.
+  if a:bufNumsHidden
+    call s:RemoveBufNumbers()
+  endif
 
-    " Replace the header with updated information
-    call s:UpdateHeader()
+  " Replace the header with updated information
+  call s:UpdateHeader()
 
-    " Return to the position we started on
-    call RestoreSoftPosition('SortBuffers')
+  " Return to the position we started on
+  call RestoreSoftPosition('SortBuffers')
+  call ResetSoftPosition('SortBuffers')
 endfunction
 
 " END: Interface to Sort. }}}
 
 """
-""" START: Support for sorting... based on explorer.vim }}}
+""" END: Support for sorting... based on explorer.vim }}}
 
+
+" Public API {{{
+function! SBUpdateBuffer(bufNr)
+  if bufexists(a:bufNr+0)
+    call s:DynUpdate('u', a:bufNr + 0, 0)
+  endif
+endfunction
+
+function! SBCurBufNumber()
+  return SBBufNumber(line('.'))
+endfunction
+
+function! SBBufNumber(line)
+  " Even when buffer numbers are hidden, we sometimes turn them on
+  "   temporarily, so detect it and take advantage of it for faster buffer
+  "   number determination.
+  if s:hideBufNums && getline(a:line) !~# '^\d\+\s\+'
+    if a:line <= s:headerSize
+      return -1
+    endif
+
+    let bufIndex = a:line - s:headerSize - 1
+    let bufNo = MvElementAt(s:bufList, "\n", bufIndex) + 0
+    if bufNo == ""
+      return -1
+    else
+      return bufNo + 0
+    endif
+  else
+    return s:GetBufferNumber(getline(a:line))
+  endif
+endfunction
+
+" Can't accept range as the user will not be able to use the return value then.
+function! SBSelectedBuffers(fline, lline) " range 
+  let bufNums = SBSelectedBufNums(a:fline, a:lline)
+  let bufList = ''
+  if bufNums != ''
+    let bufList = substitute(bufNums, '\d\+', '#&:p', 'g')
+  endif
+  return bufList
+endfunction
+
+function! SBSelectedBufNums(fline, lline) " range 
+  let bufNums = ''
+  " FIXME: When a:firstline == a:lastline, currently there seems to be no
+  "   reliable way to detect if the command was executed on the visual range
+  "   (as it could be the default range too), but the third condition here
+  "   should be sufficient for most of the cases.
+  if s:MultiSelectExists() &&
+        \!((a:fline != a:lline) ||
+        \  (a:fline == a:lline && line("'<") == line("'>") &&
+        \   a:fline == line("'<")))
+    call MSStartSelectionIter()
+    while MSHasNextSelection()
+      let sel = MSNextSelection()
+      let fl = MSFL(sel)
+      let ll = MSLL(sel)
+      while fl <= ll
+        let bufNo = s:GetBufferNumber(getline(fl))
+        if bufNo != -1
+          let bufNums = bufNums . bufNo.' '
+        endif
+        let fl = fl + 1
+      endwhile
+    endwhile
+    call MSStopSelectionIter()
+  elseif a:fline > 0 && a:lline > 0
+    let fl = a:fline
+    while fl <= a:lline
+      let bufNo = s:GetBufferNumber(getline(fl))
+      if bufNo != -1
+        let bufNums = bufNums . bufNo.' '
+      endif
+      let fl = fl + 1
+    endwhile
+  endif
+  return bufNums
+endfunction
+" Public API }}}
+ 
 
 """ START: WinManager hooks. {{{
 
@@ -1826,8 +2239,25 @@ endfunction
 
 """ END: WinManager hooks. }}}
 
+" Do the actual initialization.
+call s:Initialize()
+
+" Initialize with the bufers that might have been already loaded. This is
+"   required to show the buffers that are loaded by specifying them as
+"   command-line arguments (Reported by David Fishburn).
+if ! s:disableMRUlisting && s:MRUlist == ''
+  let i = 1
+  let lastBufNr = bufnr('$')
+  while i <= lastBufNr
+    if bufexists(i)
+      let s:MRUlist = s:MRUlist . i . ','
+    endif
+    let i = i + 1
+  endwhile
+endif
+
 " Restore cpo.
 let &cpo = s:save_cpo
 unlet s:save_cpo
 
-" vim6:fdm=marker sw=2
+" vim6:fdm=marker et sw=2
