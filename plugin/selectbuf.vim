@@ -1,7 +1,9 @@
 "
 " selectbuf.vim -- lets you select a buffer visually.
 " Author: Hari Krishna <haridsv@ureach.com>
-" Last Change: 04-Oct-2001 @ 16:45
+" Last Change: 08-Oct-2001 @ 17:39
+" Requires: Vim-6.0 or higher, lightWeightArray.vim, bufNwinUtils.vim
+" Version: 2.0.2
 "
 "  Source this file and press <F3> to get the list of buffers.
 "  Move the cursor on to the buffer that you need to select and press <CR> or
@@ -87,7 +89,7 @@ function! s:SelBufListBufs()
   let curBuf = bufnr("%")
   " A quick hack to restore the search string.
   if histnr("search") != -1
-    let g:selBufSavedSearchString = histget("search", -1)
+    let s:selBufSavedSearchString = histget("search", -1)
   endif
   split
 
@@ -167,6 +169,15 @@ function! s:SelBufExecBufClean()
   " In case hidden is set, the buffer is not unloaded, so delete the contents.
   0,$d
   set nomodified
+
+  " A quick hack to restore the search string.
+  if exists ("s:selBufSavedSearchString")
+    if histget ("search", -1) != s:selBufSavedSearchString
+      let @/ = s:selBufSavedSearchString
+      call histadd ("search", s:selBufSavedSearchString)
+      unlet s:selBufSavedSearchString
+    endif
+  endif
 endfunction
 
 function! s:SelBufSelectCurrentBuffer(openInNewWindow)
