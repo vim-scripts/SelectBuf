@@ -1,9 +1,9 @@
 " selectbuf.vim -- lets you select a buffer visually.
 " Author: Hari Krishna <hari_vim@yahoo.com>
-" Last Change: 01-Feb-2002 @ 19:26
+" Last Change: 04-Feb-2002 @ 11:04
 " Created:     20-Jul-1999
 " Requires: Vim-6.0, multvals.vim(2.0.5), genutils.vim(1.0.6)
-" Version: 2.2.2
+" Version: 2.2.3
 " Download latest version from:
 "           http://vim.sourceforge.net/scripts/script.php?script_id=107
 "
@@ -499,7 +499,6 @@ function! s:SelBufUpdateBuffer()
 
   " Loop over all the buffers.
   let i = 1
-  let myBufNr = FindBufferForName(s:windowName)
   while i <= bufnr("$")
     let newLine = ""
     let showBuffer = 0
@@ -606,7 +605,8 @@ function! s:SelBufGetBufLine(bufNum)
     else
       let newLine = newLine . " "
     endif
-    
+
+    let myBufNr = FindBufferForName(s:windowName)
     " Special case for "my" buffer as I am finally going to be
     "  non-modifiable, anyway.
     if getbufvar(a:bufNum, "&modifiable") == 0 || myBufNr == a:bufNum
