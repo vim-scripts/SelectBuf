@@ -1,9 +1,9 @@
 *selectbuf.txt* A fast and feature rich buffer explorer.
                     Requires Vim 6.0
-            Last Change: 10-Mar-2003 @ 09:29
+            Last Change: 07-Apr-2003 @ 09:49PM
           Since Version: 3.0
-               Revision: 1.0.4
-         Plugin Version: 3.0
+               Revision: 1.1.2
+         Plugin Version: 3.1
                  Author: Hari Krishna Dara (hari_vim at yahoo dot com)
 
                                             *selectbuf-introduction*
@@ -29,7 +29,7 @@ OVERVIEW                                    *selectbuf-overview*
 
 |selectbuf-settings|        An explanation of how to configure the plugin.
 
-|selectbuf-changes-3.0|     A change list for version 3.0 from previous version.
+|selectbuf-changes|         A change list for version 3.0 from previous version.
 
 |selectbuf-known-issues|    A list of known issues.
 
@@ -67,6 +67,11 @@ the file or move it into a different directory, you can set the loaded_selectbuf
 variable in your vimrc. You can also set the no_selectbuf_maps to disable just
 the mappings defined in this plugin or no_plugin_maps to disable mappings in all
 the plugins (provided they honor this setting), in your vimrc.
+
+In addition, it is recommended that you apply the following patch to Vim 6.1
+to avoid flooding the |messages| with unwanted stuff.
+
+      6.1.344  ":silent filetype" writes to the message history
 
                                             *selectbuf-activation-key*
                                             *selectbuf-plug-mapping*
@@ -289,7 +294,7 @@ vertically split left window. >
                         *selBufDisableSummary*        *selBufEnableDynUpdate*
                         *selBufHighlightOnlyFilename* *selBufIgnoreNonFileBufs*
                         *selBufRestoreWindowSizes*    *selBufSplitType*
-                        *selBufUseVerticalSplit*
+                        *selBufUseVerticalSplit*      *selBufDoFileOnClose*
 
 Here is a table that describes the names of the global variables with their
 defaults.
@@ -360,15 +365,19 @@ defaults.
                                         values are: number, name,
                                                              path, type,
                                                              indicators, mru.
-    selBufDelayedDynUpdate      1       By default, the plugin waits for the
-                                        browser window to get focus before
-                                        making updates for the buffers added
-                                        and deleted (and when MRU order
+    selBufDelayedDynUpdate      0       If you enable this, the plugin waits
+                                        for the browser window to get focus
+                                        before making updates for the buffers
+                                        added and deleted (and when MRU order
                                         changes), even when the browser window
                                         is visible. This again is a little more
                                         efficient than making the updates
-                                        immediately, but if you don't want this
-                                        feature, then set this to 0.
+                                        immediately. If you use mouse to select
+                                        the buffers and you use MRU sort
+                                        ordering, then you would want to keep
+                                        this setting disabled as otherwise you
+                                        can end up double-clicking on a wrong
+                                        buffer.
     selBufDisableMRUlisting     0       Disable generating an MRU listing of
                                         the file usage. If you don't use MRU
                                         sorting, then disabling this should
@@ -421,6 +430,14 @@ defaults.
                                         this setting instead, as the plugin does
                                         some additional customizations when this
                                         is on.
+    selBufDoFileOnClose         1       By default, the plugin executes the
+                                        |:file| command after the plugin window
+                                        is closed, in case you lost track of
+                                        which file you are looking at. But this
+                                        will have a side effect of adding a line
+                                        to your |:messages|. If you don't like
+                                        this, set this to 0 to disable this
+                                        feature.
 
 
 Note that these variables are required only during the startup and
@@ -436,6 +453,27 @@ below: >
     "= Sorting=mru,showDetails=0,showHidden=0,showPaths=0,hideBufNums=0
 <
 ==============================================================================
+
+                                            *selectbuf-changes*    
+
+                                            *selectbuf-changes-3.1*
+- Fixed problem with disabling DelayedDynUpdate under WinManager. Also this
+  setting is now by default disabled (David Fishburn).
+- Now the cursor position is remember correctly for incremental update.
+- If files are opened from the command-line, and if SelectBuf is opened
+  before accessing all the files, those files that are not accessed don't appear
+  in (David Fishburn).
+- Performance improvements to reduce number of window jumps when used with
+  WinManager (WinManager also had to be changed for this).
+- New setting selBufDoFileOnClose to control executing :file command when the
+  browser window is closed.
+- Improved MRU list handling for new buffers added.
+- Fixed showDetails to show '+' in front of buffers when they are modified
+  (David Fishburn)
+- Improved the accuracy of showing % and # markers when showDetails is enabled.
+- Now the default register is not overwritten when SelectBuf is used while the
+  hideBufNums is selected (David Fishburn).
+- Better filename handling (for buffers with special chars in their names)
 
                                             *selectbuf-changes-3.0*
 - Dropped selBufWindowName, selBufRemoveBrowserBuffer, selBufOpenInNewWindow,
