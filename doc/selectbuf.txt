@@ -121,6 +121,9 @@ the next, previous and the current buffers in the order of their buffer
 numbers, irrespective of how the buffers are sorted. If you want to go to the
 line corresponding to the current buffer, you just have to type "'c" (without
 the quotes).
+
+When MRU sorting is used, you can also use the mark d (accessed as 'd) to
+quickly go back to the location of the previous selection.
 ==============================================================================
 
                                             *selectbuf-features*
@@ -430,6 +433,7 @@ vertically split left window. >
                         *selBufRestoreWindowSizes*    *selBufSplitType*
                         *selBufUseVerticalSplit*      *selBufDoFileOnClose*
                         *selBufDisplayMaxPath*        *selBufLauncher*
+                        *selBufRestoreSearchString*
 
 Here is a table that describes the names of the global variables with their
 defaults.
@@ -598,6 +602,11 @@ defaults.
                                         or external command (by prefixing it
                                         with a bang (|:!|)) that accepts a
                                         filename as an argument.
+    selBufRestoreSearchString   1       Normally, SelectBuf saves and restores
+                                        the search strings such that what you
+                                        search inside the browser window, stays
+                                        inside. But you can change this setting
+                                        value to 0 to disable this behavior.
 
 
 Note that these variables are required only during the startup and
@@ -820,6 +829,20 @@ This also works on visual blocks.
 ==============================================================================
                                             *selectbuf-changes*
 
+                                            *selectbuf-changes-3.6*
+- Restoring search string works again. New setting |selBufRestoreSearchString|.
+- New mark d, see |selectbuf-marks|.
+
+                                            *selectbuf-changes-3.5*
+
+- Refresh now updates the MRU list.
+- Fixed broken "toggle details" functionality.
+- "SBLaunch ." now correctly launches windows explorer on the current
+  directory as expected.
+- Typing buffer number directly in the browser window now works much
+  better.
+- Misc. bug fixes. 
+
                                             *selectbuf-changes-3.4*
 - Faster sorting of buffer list.
 - If multiselect is installed, you can use spacebar to toggle selection. See
@@ -905,6 +928,8 @@ This also works on visual blocks.
 - If you perform a command from plugin window that splits the window and
   switches to a different buffer, the plugin changes the mode and the 'quit'
   behavior changes.
+- Open browser from one window. Try to open again from another window and
+  select a buffer. The buffer is shown in the first window.
 
                                             *selectbuf-wishlist*
 TBD

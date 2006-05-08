@@ -1,38 +1,89 @@
 " selectbuf.vim
 " Author: Hari Krishna (hari_vim at yahoo dot com)
-" Last Change: 14-Mar-2005 @ 16:57
+" Last Change: 13-Jan-2006 @ 17:37
 " Created: Before 20-Jul-1999
 "          (Ref: http://groups.yahoo.com/group/vim/message/6409
 "                mailto:vim-thread.1235@vim.org)
-" Requires: Vim-6.3, multvals.vim(3.5), genutils.vim(1.16)
+" Requires: Vim-6.3, multvals.vim(3.5), genutils.vim(1.19)
 " Depends On: multiselect.vim(1.0)
-" Version: 3.5.0
+" Version: 3.6.1
 " Licence: This program is free software; you can redistribute it and/or
 "          modify it under the terms of the GNU General Public License.
 "          See http://www.gnu.org/copyleft/gpl.txt 
 " Download From:
 "     http://www.vim.org/script.php?script_id=107
 " Usage: 
+"   PLEASE READ THE INSTALL SECTION COMPLETELY.
+"   
+"   SelectBuf is a buffer explorer similar to the file explorer plugin that
+"   comes with Vim, the difference being that file explorer allows you to view
+"   the files on the file system, where as buffer explorer limits the view to
+"   only the files that are already opened in the current Vim session. It is
+"   even possible and easy to extend the plugin with new commands.
+"   
+"   Since the first time I released it in Jul '99 (try sending an email to 
+"   vim-thread.1235@vim.org if you are curious), the script has gone many
+"   revisions and enhancements both technologiclly and feature wise, taking
+"   advantage of all the niceties that the new version of Vim has to offer.
+"   
 "   For detailed help, see ":help selectbuf" or read doc/selectbuf.txt. 
-"
-"   Source this file or drop it in plugin directory and press <F3> to get the
-"     list of buffers.
-"   Move the cursor on to the buffer that you need to select and press <CR> or
+"   
+"   - Install the plugin, restart vim and press <F3> (the default key binding)
+"     to get the list of buffers.
+"   - Move the cursor on to the buffer that you need to select and press <CR> or
 "     double click with the left-mouse button.
-"   If you want to close the window without making a selection, press <F3>
+"   - If you want to close the window without making a selection, press <F3>
 "     again.
-"   You can also press ^W<CR> or O to open the file in a new or previous window.
-"   You can use d to delete or D to wipeout the buffer. Use d again to
-"     undelete a previously deleted buffer (you need to first view the deleted
-"     buffers using u command).
+"   - You can also press ^W<CR> or O to open the file in a new or previous
+"     window.  You can use d to delete or D to wipeout the buffer. Use d again
+"     to undelete a previously deleted buffer (you need to first view the
+"     deleted buffers using u command).
+"   
+"   You can change the default key mapping to open browser window by setting 
+"   
+"         nmap <unique> <silent> <YourKey> <Plug>SelectBuf
+"   
+"   Almost everything is configurable, including all the key mappings that are
+"   available. E.g., you can change the help key to <C-H> instead of the
+"   default ?, so you can free it to do backward searches in the file list,
+"   using the following mapping:
+"   
+"         noremap <silent> <Plug>SelBufHelpKey <C-H> 
+"   
+"   Some highlights of the features are:
+"   
+"   - It is super fast as the buffer list is cached and incrementally built as
+"     new files are added and the old ones are deleted.
+"   - Hide buffer numbers to save on real estate (goes well with "Always On"
+"     mode or when used with WinManager).
+"   - Opens a new window to avoid disturbing your existing windows. But you can
+"     change the behavior to reuse the current window or even to permanently
+"     keep it open.
+"   - You can select block of buffers and delete or wipeout all the buffers at
+"     once.
+"   - You can toggle various settings on and off while you are in the browser.
+"     You can e.g., toggle showing the buffer indicators by pressing i.
+"   - Goes very well with WinManager.
+"   - There are different sorting keys available. You can sort by buffer number,
+"     name, type (extension), path, indicators and MRU order. You can even
+"     select a default sort order
+"   - If you use multiple windows, then the browser restores the window sizes
+"     after closing it.
+"   - Syntax coloring makes it easy to find the buffer you are looking to
+"     switch to.
+"   - Full configurability.
+"   - Extensibility.
+"   - Support for WinManager and multiselect plugins.
+"   - and many more.
+"   
+"   For more information, read the vim help on seletbuf.
 "
 " TODO:
-"   - Open browser from one window. Try to open again from another window and
-"     select a buffer. The buffer is shown in the first window.
+"   - Some form of quick startup to reduce the Vim startup time.
 "   - It is useful to have space for additional indicators. Useful to show
 "     perforce status.
 "   - s:curBufNameLen is getting reset to 9 else where (hard to reproduce).
-"     - Fixed one issue, need to observe if it still happens.
+"     - Fixed one issue, need to observe if it is still happens.
 "   - Is sort by path working correctly?
 "   - When entering any of the plugin window's WinManager does something that
 "     makes Vim ignore quick mouse-double-clicks. This is a WinManager issue,
@@ -58,11 +109,11 @@ endif
 if !exists('loaded_genutils')
   runtime plugin/genutils.vim
 endif
-if !exists('loaded_genutils') || loaded_genutils < 116
+if !exists('loaded_genutils') || loaded_genutils < 119
   echomsg 'SelectBuf: You need a newer version of genutils.vim plugin'
   finish
 endif
-let loaded_selectbuf=305
+let loaded_selectbuf=400
 
 " Make sure line-continuations won't cause any problem. This will be restored
 "   at the end
@@ -107,6 +158,7 @@ if !exists('s:disableSummary') " The first-time only, initialize with defaults.
   else
     let s:launcher = ''
   endif
+  let s:restoreSearchString = 1
 endif
 
 function! s:CondDefSetting(globalName, settingName, ...)
@@ -138,6 +190,7 @@ call s:CondDefSetting('g:selBufDoFileOnClose', 's:doFileOnClose')
 call s:CondDefSetting('g:selBufIgnoreCaseInSort', 's:ignoreCaseInSort')
 call s:CondDefSetting('g:selBufDisplayMaxPath', 's:displayMaxPath')
 call s:CondDefSetting('g:selBufLauncher', 's:launcher')
+call s:CondDefSetting('g:selBufRestoreSearchString', 's:restoreSearchString')
 
 "
 " END configuration.
@@ -156,7 +209,7 @@ if (! exists("no_plugin_maps") || ! no_plugin_maps) &&
   if !hasmapto('<Plug>SelectBuf', 'n')
     nmap <unique> <silent> <F3> <Plug>SelectBuf
   endif
-  if !hasmapto('<Plug>SelectBuf', 'i')
+  if !hasmapto('<ESC><Plug>SelectBuf', 'i')
     imap <unique> <silent> <F3> <ESC><Plug>SelectBuf
   endif
   if !hasmapto('<Plug>SelBufLaunchCmd', 'n')
@@ -239,7 +292,8 @@ if !exists('s:myBufNum')
   "   numbers when buffer numbers are hidden.
   let s:headerSize = 0
   let s:myBufNum = -1
-  let s:savedSearchString = ""
+  let s:savedSearchString = ''
+  let s:savedSBSearchString = ''
   let s:curBufNameLen = 9 " Buffer name length used currently, start with min.
   " The operating mode for the current session. This is reset after the browser
   "   is closed. Ideally, we assume that the browser is open in only one window.
@@ -271,7 +325,7 @@ let s:settings = 'AlwaysHideBufNums,AlwaysShowDetails,AlwaysShowHelp,' .
       \ 'DefaultSortOrder,DelayedDynUpdate,DisableMRUlisting,DisableSummary,' .
       \ 'EnableDynUpdate,IgnoreCaseInSort,IgnoreNonFileBufs,' .
       \ 'RestoreWindowSizes,SplitType,UseVerticalSplit,DoFileOnClose,' .
-      \ 'DisplayMaxPath,Launcher'
+      \ 'DisplayMaxPath,Launcher,RestoreSearchString'
 " Map of global variable name to the local variable that are different than
 "   their global counterparts.
 let s:settingsMap{'DefaultSortOrder'} = 'sorttype'
@@ -331,8 +385,6 @@ function! s:ListBufs()
   " user (instead of accidentally switching to the browser buffer), and the
   " browser mode is not to keep the window open.
   if s:opMode ==# 'user' && s:browserMode !=# 'keep' && browserWinNo == -1
-    call s:RestoreSearchString()
-
     " Arrange a notification of the window close on this window.
     call AddNotifyWindowClose(s:windowName, s:myScriptId . "RestoreWindows")
   endif
@@ -618,6 +670,8 @@ function! s:IncrementalUpdate() " {{{
 	continue
       else
 	silent! keepjumps .delete _
+        " Mark the current position so that user can go back.
+        mark d
       endif
     endif
     if action ==# 'c' || action ==# 'm'
@@ -1005,7 +1059,7 @@ function! s:SelectCurrentBuffer(openMode) " {{{
   "   the window settings.
   if ! didQuit && s:browserMode ==# "split"
     call RemoveNotifyWindowClose(s:windowName)
-    call ResetWindowSettings2(s:myScriptId)
+    call ResetWindowSettings2('SelectBuf')
   endif
 
   let v:errmsg = ""
@@ -1178,11 +1232,13 @@ function! s:SetupBuf() " {{{
   aug SelectBufAutoUpdate
   au!
   exec "au BufWinEnter " . GetBufNameForAu(fnamemodify(s:windowName, ':p')) .
-        \ " :call <SID>AutoListBufs()"
+        \ " :call <SID>AutoListBufs() | call <SID>SaveSearchString()"
   exec "au BufWinLeave " . GetBufNameForAu(fnamemodify(s:windowName, ':p')) .
-        \ " :call <SID>Done()"
+        \ " :call <SID>Done() | call <SID>RestoreSearchString()"
   exec "au WinEnter " . GetBufNameForAu(fnamemodify(s:windowName, ':p')) .
-        \ " :call <SID>AutoUpdateBuffers(0)"
+        \ " :call <SID>AutoUpdateBuffers(0) | call <SID>SaveSearchString()"
+  exec "au WinLeave " . GetBufNameForAu(fnamemodify(s:windowName, ':p')) .
+        \ " :call <SID>RestoreSearchString()"
   aug END
 
   call s:SetupSyntax()
@@ -1415,25 +1471,42 @@ function! s:Done() " {{{
   if s:opMode ==# 'WinManager' || s:browserMode ==# 'keep'
     return
   endif
-
-  call s:RestoreSearchString()
 endfunction " Done }}}
 
 function! s:RestoreWindows(dummyTitle) " {{{
   " If user wants us to restore window sizes during the exit.
   if s:restoreWindowSizes && s:browserMode !=# "keep"
-    call RestoreWindowSettings2(s:myScriptId)
+    call RestoreWindowSettings2('SelectBuf')
   endif
 endfunction " }}}
 
-function! s:RestoreSearchString() " {{{
-  if s:savedSearchString != ''
-    let @/ = s:savedSearchString " This doesn't modify the history.
-    let s:savedSearchString = histget("search")
-    " Fortunately, this will make sure there is only one copy in the history,
-    " and ignores the call if it is empty.
-    call histadd("search", @/)
+" Save the general search string and restore the previous search string in {{{
+" SelectBuf
+function! s:SaveSearchString()
+  if !s:restoreSearchString
+    return
   endif
+
+  " If a new search string has been entered outside browser, save it first so
+  " we can restore it later.
+  if @/ == histget('search') && @/ != s:savedSBSearchString
+    let s:savedSearchString = @/
+  endif
+  let @/ = s:savedSBSearchString
+endfunction
+
+" CAUTION: Gets called twice while closing the window.
+function! s:RestoreSearchString()
+  if !s:restoreSearchString
+    return
+  endif
+
+  " If a new search string has been entered in the browser, save it first so
+  " we can restore it later.
+  if @/ == histget('search') && @/ != s:savedSearchString
+    let s:savedSBSearchString = @/
+  endif
+  let @/ = s:savedSearchString " This doesn't modify the history.
 endfunction " }}}
 
 function! s:DefMap(mapType, mapKeyName, defaultKey, cmdStr) " {{{
@@ -1597,7 +1670,7 @@ function! s:GoToBrowserWindow(browserWinNo)
       " But don't save unless "split" mode, as otherwise we are not creating a
       "   new window.
       if s:restoreWindowSizes && s:browserMode ==# "split"
-	call SaveWindowSettings2(s:myScriptId, 1)
+	call SaveWindowSettings2('SelectBuf', 1)
       endif
 
       " Don't split window for "switch" mode.
@@ -1634,6 +1707,9 @@ function! s:GoToBrowserWindow(browserWinNo)
 	  let &isfname = _isf
 	endtry
 	let s:myBufNum = bufnr('%')
+        " This is a one time operation to initialize the restore-search
+        " functionality.
+        call s:SaveSearchString()
       endif
     endif
   endif
