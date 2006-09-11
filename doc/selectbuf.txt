@@ -1,9 +1,9 @@
 *selectbuf.txt* A fast and feature rich buffer explorer.
                     Requires Vim 6.0
-            Last Change: 28-Oct-2004 @ 09:01
+            Last Change: 06-Sep-2006 @ 17:19
           Since Version: 3.0
-               Revision: 1.3.1
-         Plugin Version: 3.4
+               Revision: 1.5.0
+         Plugin Version: 4.0
                  Author: Hari Krishna Dara (hari_vim at yahoo dot com)
 
                                             *selectbuf-introduction*
@@ -35,7 +35,7 @@ OVERVIEW                                    *selectbuf-overview*
 
 |selectbuf-deprecations|     A list of deprecated features.
 
-|perforce-limitations|       Current limitations of the plugin.
+|selectbuf-limitations|       Current limitations of the plugin.
 
 |selectbuf-changes|          A change list for current version from the previous
                              versions.
@@ -49,23 +49,11 @@ OVERVIEW                                    *selectbuf-overview*
 ==============================================================================
 
                                             *selectbuf-installation*
-To install, place the plugin in one of the runtime plugin directories along
-with the genutils.vim and multvals.vim scripts that it depends on. This
-typically is .vim/plugin or vimfiles/plugin directory under your home
-directory. To get the latest versions of these plugins, goto the following
-webpages:
-     selectbuf.vim: http://www.vim.org/script.php?script_id=107
-     genutils.vim:  http://vim.sourceforge.net/script.php?script_id=197
-     multvals.vim:  http://vim.sourceforge.net/script.php?script_id=171
-
-The distribution contains 2 files:
-    - The selectbuf plugin itself (selectbuf.vim).
-        - Should go into the user plugin directory.
-    - The help file (this file) (selectbuf.txt).
-        - Should go into the user doc directory.
-
-If you obtained the plugin as a zip archive,
-    - Just extract it in your runtime directory.
+    - To install, download the latest versions of these two plugins:
+        selectbuf: http://www.vim.org/script.php?script_id=107
+        genutils:  http://vim.sourceforge.net/script.php?script_id=197
+    - Extract the zip archives in to your runtime directory (.vim or vimfiles
+      under your HOME directory).
     - Start a new instance or go to an existing instance of vim.
     - Execute:
 >
@@ -78,11 +66,6 @@ the file or move it into a different directory, you can set the loaded_selectbuf
 variable in your vimrc. You can also set the no_selectbuf_maps to disable just
 the mappings defined in this plugin or no_plugin_maps to disable mappings in all
 the plugins (provided they honor this setting), in your vimrc.
-
-In addition, it is recommended that you apply the following patch to Vim 6.1
-to avoid flooding the |messages| with unwanted stuff.
-
-      6.1.344  ":silent filetype" writes to the message history
 
                                             *selectbuf-activation-key*
                                             *selectbuf-plug-mapping*
@@ -291,7 +274,7 @@ SelectBuf       This command can be used instead of the
                 otherwise it opens a new window for the browser and takes the
                 cursor to the new window.
 
-                                            *SBSettings*
+                                            *:SBSettings*
 SBSettings      This command is an interactive way of temporarily modifying
                 script settings without needing to remember the names of the
                 global variables and to remember to run |SBInitialize| every
@@ -303,6 +286,17 @@ SBSettings      This command is an interactive way of temporarily modifying
                 it. Again, if you don't want to change the value just hit
                 <Enter>.
 
+                The name of the setting and its new value can also be directly
+                passed to this command. The syntax of the command is:
+>
+                    :SBSettings [setting name] [new value]
+<
+                You can use Vim's completion mechanism to complete partially
+                typed setting name. Ex: >
+
+                    :SBttings DisableSummary 0
+                    Current value for DisableSummary: "1" New value: "0"
+<
                 Note that the settings are modified only in the current Vim
                 session. If you want the change to take place across sessions,
                 lookup the global variable name corresponding to the setting and
@@ -310,11 +304,11 @@ SBSettings      This command is an interactive way of temporarily modifying
 
                                             *SBInitialize*
 SBInitialize    This command reinitializes the plugin and imports any changes
-                done to the plugin settings in the global name space. If any
-                plugin specific global variables are modified in the current
-                Vim session, they are not imported until you run this command
-                or any other command that results in a re-initialization of
-                the plugin (like |SBSettings|).
+                done to the plugin settings in the global name space.
+                Changing some settings may have impact on other plugin or Vim
+                settings, so to propagate these changes, you should execute the
+                :SBInitialize command. If you use |:SBSettings| command, you
+                don't need to execute this command separately.
 
                                             *SBLaunch*
 This is a global command that can open the current buffer (with no arguments),
@@ -361,9 +355,9 @@ This command allows you to execute any built-in or user-defined command that
 takes in a list of buffer/file names over a selected block of buffers in the
 browser window. All that you need to do is first create a selection by using
 mouse or keyboard and execute :SBExec with the ex-mode command (and its
-arguments) that you would like to execute on them (the command should accept a
-buffer/file name). E.g., you can sort the list by filetype and select all the
-java files and execute the following command on them:
+arguments) that you would like to execute on them. E.g., you can sort the list
+by filetype and select all the java files and execute the following command on
+them:
 >
         :SBExec next
 <
@@ -391,7 +385,7 @@ the above.
 
 If you specify string "%s" in the command, it is replaced with the buffer names
 before executing the command and otherwise, the buffer names are appended at the
-end of the command. You can also specify "%b" to replace with the buffer numbers
+end of the command. You can also specify "%n" to replace with the buffer numbers
 instead of the buffer names, for those ex commands that understand only buffer
 numbers. Don't use "%n" if you are executing an external command, as the
 external command will not understand the Vim buffer numbers. To pass in "%"
@@ -413,10 +407,8 @@ To select buffers that are non-adjacent to each other, see
 The plugin provides support for customization through a set of global
 variables, in addition to the customization of the activation key as described
 in |selectbuf-activation-key| and mappings as described in |selectbuf-mappings|.
-When assigned a value in the vimrc, these global variables are read in by the
-plugin during the startup and are used to customize it. As an example, the below
-commands when placed in vimrc make the browser stay always visible in a
-vertically split left window. >
+As an example, the below commands when placed in vimrc make the browser stay
+always visible in a vertically split left window. >
 
         :let g:selBufBrowserMode = "keep"
         :let g:selBufUseVerticalSplit = 1
@@ -506,9 +498,15 @@ defaults.
                                         which can always be changed by using the
                                         |SelBufSortSelectFKey| and
                                         |SelBufSortSelectBKey|. Other possible
-                                        values are: number, name,
-                                                             path, type,
-                                                             indicators, mru.
+                                        values are: number, name, path, type,
+                                        indicators, mru.
+    selBufEnableDynUpdate       1       By default, the plugin dynamically
+                                        updates the browser as and when buffers
+                                        get added and deleted. This usually is
+                                        much more efficient than generating the
+                                        list every time, but if you want to
+                                        disable this feature, then set this to
+                                        0.
     selBufDelayedDynUpdate      0       If you enable this, the plugin waits
                                         for the browser window to get focus
                                         before making updates for the buffers
@@ -537,13 +535,6 @@ defaults.
                                         seeing too many more prompts, so it is
                                         recommended to increase the 'cmdheight'
                                         value to at least 2.
-    selBufEnableDynUpdate       1       By default, the plugin dynamically
-                                        updates the browser as and when buffers
-                                        get added and deleted. This usually is
-                                        much more efficient than generating the
-                                        list every time, but if you want to
-                                        disable this feature, then set this to
-                                        0.
     selBufIgnoreCaseInSort      0       A non-zero value for this setting makes
                                         the sort compare the buffer names and
                                         paths case-insensitively.
@@ -608,11 +599,8 @@ defaults.
                                         inside. But you can change this setting
                                         value to 0 to disable this behavior.
 
-
-Note that these variables are required only during the startup and
-consequently are removed by the plugin after the initialization is complete.
-This avoids cluttering the global name space. If you want to change the values
-of these settings in the current vim session, then use |SBSettings| command.
+To change the values of these settings in the current vim session, it is
+recommended to use |:SBSettings| command.
 
                                             *selectbuf-header*
 The browser window always shows a one-line header with a brief information on
@@ -697,14 +685,15 @@ you can create new commands that operate on the buffer list.
         int SBBufNumber(int line)
         " Update line for given buffer.
         int SBUpdateBuffer(int bufNr)
-        " Returns the list of all the buffers in a form that can be directly
-        "   used in an ex command accepting buffer names, for the given range.
-        "   When multiselect is installed and there are multiple selections
-        "   currently existing, the parameters are ignored.
-        String SBSelectedBuffers(int firstline, int lastline)
+        " Returns the Vim7 list of all the buffers in a form that can be
+        "   used in an ex command accepting buffer names, for the given
+        "   range. The list needs to be join()ed with a space before it can be
+        "   used in a command. If multiselect.vim is not installed, this returns
+        "   all the buffers in the given line range.
+        List SBSelectedBuffers(int firstline, int lastline)
         " Same as SBSelectedBuffers(), except that only the buffer numbers are
         "   returned.
-        String SBSelectedBufNums(int firstline, int lastline)
+        List SBSelectedBufNums(int firstline, int lastline)
         String SBSelectedBuffers(int firstline, int lastline)
 <
 It is also possible for other plugin writers to customize selectbuf such that
@@ -829,6 +818,24 @@ This also works on visual blocks.
 ==============================================================================
                                             *selectbuf-changes*
 
+                                            *selectbuf-changes-4.0*
+- Started using vim7 features, so it is no longer backwards compatible.
+- No longer depends on multvals. The plugin has been reworked to use Vim7 arrays
+  and sort(), so there should be significant improvement in performance
+  everywhere.
+- It is now autoloaded on demand, which means it will help your vim session
+  load faster.
+- Support for multiselect has been enhanced. The selections are a lot more
+  meaningful now, as they move along with the buffers. You can even sort the
+  contents and still not loose your selections.
+- |:SBSettings| is now more flexible and easier to use as it supports arguments
+  and command-line completion.
+- The global variables for the settings are no longer removed, but you should
+  still run |:SBInitialize| for any side effects to take place. Use
+  |:SBSettings| to make this easier.
+- Ignore |E788| errors that might occur while trying to update browser during
+  FileChagnedRO events.
+
                                             *selectbuf-changes-3.6*
 - Restoring search string works again. New setting |selBufRestoreSearchString|.
 - New mark d, see |selectbuf-marks|.
@@ -910,7 +917,7 @@ This also works on visual blocks.
 - Renamed SelBufHelpKey mapping to |SelBufTHelpKey|.
 - Changed the name of the browser window to "[Select Buf]" from
   "__Select_Buf__".
-- Added |SBSettings| command.
+- Added |:SBSettings| command.
 - Added support to work as a WinManager plugin.
 
                                             *selectbuf-known-issues*
@@ -930,9 +937,24 @@ This also works on visual blocks.
   behavior changes.
 - Open browser from one window. Try to open again from another window and
   select a buffer. The buffer is shown in the first window.
+- Keeping indicator field up to date has several issues.
+- Open Vim with no arguments, and use :next to specify a few. The first file
+  gets added twice to the MRU list.
+- When adding buffers incrementally, the position may not match that of sort.
+- When browser mode is switch, the windows are not resized during the selection
+  and quit. Also, if there are only two windows with unnamed buffers, quit
+  generates an error.
+- Browser window gets resized during the sort.
 
                                             *selectbuf-wishlist*
-TBD
+- There should be an option/command to restrict the buffer list to those that
+  are loaded in the current tab only. This is useful to quickly find related
+  files (that you edit in a particular tab).
+- An option to temporarily freeze the current MRU order could be useful.
+- Autoloading could further be delayed if the MRU managemnt is moved into the
+  plugin file. This is benefitial to those short console sessions in which you
+  never end up activating the browser window. This could however make it
+  unnecessarily complex, so need to evaluate.
 
                                             *selectbuf-acknowledgements*
 - Thomas Link (t dot link02a at gmx dot net) for his excellent idea with mapping
