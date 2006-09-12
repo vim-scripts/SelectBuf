@@ -1,9 +1,9 @@
 *selectbuf.txt* A fast and feature rich buffer explorer.
                     Requires Vim 6.0
-            Last Change: 06-Sep-2006 @ 17:19
+            Last Change: 12-Sep-2006 @ 16:46
           Since Version: 3.0
                Revision: 1.5.0
-         Plugin Version: 4.0
+         Plugin Version: 4.1
                  Author: Hari Krishna Dara (hari_vim at yahoo dot com)
 
                                             *selectbuf-introduction*
@@ -817,6 +817,11 @@ This also works on visual blocks.
 
 ==============================================================================
                                             *selectbuf-changes*
+
+                                            *selectbuf-changes-4.1*
+- Bug fix: multiselect usage is not conditional in some places.
+- Bug fix: Syntax may not be setup correctly when the first time browser window
+  is opened.
 
                                             *selectbuf-changes-4.0*
 - Started using vim7 features, so it is no longer backwards compatible.

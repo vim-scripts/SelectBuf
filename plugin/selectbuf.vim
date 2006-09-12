@@ -1,12 +1,12 @@
 " selectbuf.vim
 " Author: Hari Krishna (hari_vim at yahoo dot com)
-" Last Change: 10-Sep-2006 @ 23:48
+" Last Change: 12-Sep-2006 @ 16:45
 " Created: Before 20-Jul-1999
 "          (Ref: http://groups.yahoo.com/group/vim/message/6409
 "                mailto:vim-thread.1235@vim.org)
 " Requires: Vim-7.0, genutils.vim(2.0)
 " Depends On: multiselect.vim(2.1)
-" Version: 4.0.2
+" Version: 4.1.0
 " Licence: This program is free software; you can redistribute it and/or
 "          modify it under the terms of the GNU General Public License.
 "          See http://www.gnu.org/copyleft/gpl.txt 

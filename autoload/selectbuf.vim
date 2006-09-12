@@ -282,11 +282,7 @@ function! s:FullUpdate() " {{{
   silent! keepjumps $delete _ " Delete one empty extra line at the end.
   let s:headerSize = line("$")
   let s:bufNameFieldWidth = s:CalcMaxBufNameLen(-1, !g:selBufAlwaysShowHidden)
-  let _curBufNameLen = s:bufNameFieldWidth
-  let s:bufNameFieldWidth = s:CalcMaxBufNameLen(-1, !g:selBufAlwaysShowHidden)
-  if _curBufNameLen != s:bufNameFieldWidth
-    call s:SetupSyntax()
-  endif
+  call s:SetupSyntax()
 
   $
   " Loop over all the buffers.
@@ -372,7 +368,9 @@ function! s:IncrementalUpdate() " {{{
 
   " First save the selection state.
   let selectedBuffers = s:MSGetSelectedBuffers()
-  MSClear
+  if s:MultiSelectionExists()
+    MSClear
+  endif
 
   let prevBufNameFieldWidth = s:bufNameFieldWidth
   for nextAxn in s:pendingUpdAxns
@@ -2117,7 +2115,9 @@ function! s:SortBuffers(bufNumsHidden)
 
   " First save the selection state.
   let selectedBuffers = s:MSGetSelectedBuffers()
-  MSClear
+  if s:MultiSelectionExists()
+    MSClear
+  endif
 
   try
     " Allow modification
