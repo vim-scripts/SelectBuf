@@ -1,9 +1,9 @@
 *selectbuf.txt* A fast and feature rich buffer explorer.
                     Requires Vim 6.0
-            Last Change: 12-Sep-2006 @ 16:46
+            Last Change: 06-Sep-2006 @ 17:19
           Since Version: 3.0
                Revision: 1.5.0
-         Plugin Version: 4.1
+         Plugin Version: 4.2
                  Author: Hari Krishna Dara (hari_vim at yahoo dot com)
 
                                             *selectbuf-introduction*
@@ -818,6 +818,13 @@ This also works on visual blocks.
 ==============================================================================
                                             *selectbuf-changes*
 
+                                            *selectbuf-changes-4.2*
+- Bug fix: |:SBSettings| is broken.
+- Bug fix: syntax highlighting is sometimes broken the first time browser
+  window is open.
+- Bug fix: formatting is sometimes broken with incremental update, when
+  browser is open after certain sequence of buffer changes.
+
                                             *selectbuf-changes-4.1*
 - Bug fix: multiselect usage is not conditional in some places.
 - Bug fix: Syntax may not be setup correctly when the first time browser window
@@ -926,17 +933,6 @@ This also works on visual blocks.
 - Added support to work as a WinManager plugin.
 
                                             *selectbuf-known-issues*
-- Opening a large set of files at a time takes longer than it would usually
-  take. This is because, the plugin has to generate an MRU list for each buffer
-  that gets loaded into Vim. I have observed that opening 1500 files at a
-  time took almost 40 to 50% longer on an old laptop. If there are other plugins
-  that manage MRU lists at the same time, the impact can be even worse. You can
-  temporarily disable MRU feature in selectbuf (and later enable it back) by
-  using the |selBufDisableMRUlisting| setting. This should reduce the time taken
-  for loading the buffers, though the MRU listing then may not show all the
-  buffers.  You may have to select a different sort field and probably do a
-  refresh (unless the |selBufEnableDynUpdate| is disabled) before you can see
-  the complete list.
 - If you perform a command from plugin window that splits the window and
   switches to a different buffer, the plugin changes the mode and the 'quit'
   behavior changes.
@@ -956,10 +952,6 @@ This also works on visual blocks.
   are loaded in the current tab only. This is useful to quickly find related
   files (that you edit in a particular tab).
 - An option to temporarily freeze the current MRU order could be useful.
-- Autoloading could further be delayed if the MRU managemnt is moved into the
-  plugin file. This is benefitial to those short console sessions in which you
-  never end up activating the browser window. This could however make it
-  unnecessarily complex, so need to evaluate.
 
                                             *selectbuf-acknowledgements*
 - Thomas Link (t dot link02a at gmx dot net) for his excellent idea with mapping

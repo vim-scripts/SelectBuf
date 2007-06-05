@@ -1,12 +1,12 @@
 " selectbuf.vim
 " Author: Hari Krishna (hari_vim at yahoo dot com)
-" Last Change: 12-Sep-2006 @ 16:45
+" Last Change: 28-May-2007 @ 19:51
 " Created: Before 20-Jul-1999
 "          (Ref: http://groups.yahoo.com/group/vim/message/6409
 "                mailto:vim-thread.1235@vim.org)
 " Requires: Vim-7.0, genutils.vim(2.0)
 " Depends On: multiselect.vim(2.1)
-" Version: 4.1.0
+" Version: 4.2.0
 " Licence: This program is free software; you can redistribute it and/or
 "          modify it under the terms of the GNU General Public License.
 "          See http://www.gnu.org/copyleft/gpl.txt 
@@ -79,11 +79,8 @@
 "   For more information, read the vim help on seletbuf.
 "
 " TODO:
-"   - Some form of quick startup to reduce the Vim startup time.
 "   - It is useful to have space for additional indicators. Useful to show
 "     perforce status.
-"   - s:curBufNameLen is getting reset to 9 else where (hard to reproduce).
-"     - Fixed one issue, need to observe if it is still happens.
 "   - Is sort by path working correctly?
 "   - When entering any of the plugin window's WinManager does something that
 "     makes Vim ignore quick mouse-double-clicks. This is a WinManager issue,
@@ -112,7 +109,7 @@ endif
 if exists('loaded_multiselect') && loaded_multiselect < 202
   echomsg 'SelectBuf: You need a newer version of multiselect.vim plugin'
 endif
-let loaded_selectbuf=400
+let loaded_selectbuf=402
 
 " Make sure line-continuations won't cause any problem. This will be restored
 "   at the end

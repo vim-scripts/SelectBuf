@@ -387,7 +387,7 @@ function! s:IncrementalUpdate() " {{{
         let colToIns = (g:selBufAlwaysShowDetails ? 11 : 5) +
               \ s:bufNameFieldWidth + 1 " Col index starts with 1.
         call genutils#SilentSubstitute('\%'.colToIns.'c',
-              \ 'keepjumps +,$s//'.addSpacer.'/')
+              \ 'keepjumps '.(s:headerSize+1).',$s//'.addSpacer.'/')
         let s:bufNameFieldWidth = len
       elseif (action != 'c' && len == s:bufNameFieldWidth)
         " If all other buffers are shorter, then we need to reduce the spacing.
@@ -397,7 +397,7 @@ function! s:IncrementalUpdate() " {{{
           let colToDel = (g:selBufAlwaysShowDetails ? 11 : 5) + newLen
                 \ + 1 " Col index starts with 1.
           call genutils#SilentSubstitute('\%'.colToDel.'c'.remSpacer,
-                \ 'keepjumps +,$s///')
+                \ 'keepjumps '.(s:headerSize+1).',$s///')
           let s:bufNameFieldWidth = newLen
         endif
       endif
@@ -871,20 +871,25 @@ function! s:DeleteBuffers(wipeout) range
   while line <= a:lastline
     let selectedBufNum = SBCurBufNumber()
     if selectedBufNum != -1
-      if a:wipeout
-        exec "bwipeout" selectedBufNum
-        let nWipedout = nWipedout + 1
-        let wipedoutMsg = wipedoutMsg . " " . selectedBufNum
-      elseif buflisted(selectedBufNum)
-        exec "bdelete" selectedBufNum
-        let nDeleted = nDeleted + 1
-        let deletedMsg = deletedMsg . " " . selectedBufNum
-      else
-        " Undelete buffer.
-        call setbufvar(selectedBufNum, "&buflisted", "1")
-        let nUndeleted = nUndeleted + 1
-        let undeletedMsg = undeletedMsg . " " . selectedBufNum
-      endif
+      try
+        if a:wipeout
+          exec "bwipeout" selectedBufNum
+          let nWipedout = nWipedout + 1
+          let wipedoutMsg = wipedoutMsg . " " . selectedBufNum
+        elseif buflisted(selectedBufNum)
+          exec "bdelete" selectedBufNum
+          let nDeleted = nDeleted + 1
+          let deletedMsg = deletedMsg . " " . selectedBufNum
+        else
+          " Undelete buffer.
+          call setbufvar(selectedBufNum, "&buflisted", "1")
+          let nUndeleted = nUndeleted + 1
+          let undeletedMsg = undeletedMsg . " " . selectedBufNum
+        endif
+      catch
+        echohl ErrorMsg | echo substitute(v:exception, '^[^:]\+:', '', '')
+              \ | echohl NONE
+      endtry
     endif
     silent! +
     let line = line + 1
@@ -1473,7 +1478,7 @@ function! selectbuf#SBSettings(...)
     let selectedSetting = genutils#PromptForElement(s:settings, -1,
           \ "Select the setting: ", -1, 0, 3)
   endif
-  if selectedSetting !~# s:EMPTY_STR
+  if selectedSetting !~# '^\s*$'
     let oldVal = g:selBuf(selectedSetting)
     if a:0 > 1
       let newVal = a:2
