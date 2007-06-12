@@ -4,9 +4,9 @@
 " Created: Before 20-Jul-1999
 "          (Ref: http://groups.yahoo.com/group/vim/message/6409
 "                mailto:vim-thread.1235@vim.org)
-" Requires: Vim-7.0, genutils.vim(2.0)
+" Requires: Vim-7.0, genutils.vim(2.4)
 " Depends On: multiselect.vim(2.1)
-" Version: 4.2.0
+" Version: 4.3.0
 " Licence: This program is free software; you can redistribute it and/or
 "          modify it under the terms of the GNU General Public License.
 "          See http://www.gnu.org/copyleft/gpl.txt 
@@ -99,7 +99,7 @@ endif
 if !exists('loaded_genutils')
   runtime plugin/genutils.vim
 endif
-if !exists('loaded_genutils') || loaded_genutils < 200
+if !exists('loaded_genutils') || loaded_genutils < 204
   echomsg 'SelectBuf: You need a newer version of genutils.vim plugin'
   finish
 endif
@@ -109,7 +109,7 @@ endif
 if exists('loaded_multiselect') && loaded_multiselect < 202
   echomsg 'SelectBuf: You need a newer version of multiselect.vim plugin'
 endif
-let loaded_selectbuf=402
+let loaded_selectbuf=403
 
 " Make sure line-continuations won't cause any problem. This will be restored
 "   at the end
@@ -163,6 +163,7 @@ call s:CondDefSetting('g:selBufIgnoreCaseInSort', 0)
 call s:CondDefSetting('g:selBufDisplayMaxPath', -1)
 call s:CondDefSetting('g:selBufLauncher', '')
 call s:CondDefSetting('g:selBufRestoreSearchString', 1)
+call s:CondDefSetting('g:selBufShowRelativePath', 0)
 " }}}
                       
 " Call this any time to reconfigure the environment. This re-performs the same

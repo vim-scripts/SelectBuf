@@ -1,9 +1,6 @@
 *selectbuf.txt* A fast and feature rich buffer explorer.
-                    Requires Vim 6.0
-            Last Change: 06-Sep-2006 @ 17:19
+            Last Change: 08-Jun-2007 @ 18:50
           Since Version: 3.0
-               Revision: 1.5.0
-         Plugin Version: 4.2
                  Author: Hari Krishna Dara (hari_vim at yahoo dot com)
 
                                             *selectbuf-introduction*
@@ -598,6 +595,21 @@ defaults.
                                         search inside the browser window, stays
                                         inside. But you can change this setting
                                         value to 0 to disable this behavior.
+    selBufShowRelativePath      0       When selBufAlwaysShowPaths is set 2,
+                                        you can choose to display full (the
+                                        default) or relative (when set to 1)
+                                        paths for the file directory. Showing
+                                        relative paths has the advantage that
+                                        more amount of the path can fit in the
+                                        display. Note that the paths are
+                                        relative to a base directory
+                                        established during full refresh of the
+                                        browser. This means, if you change
+                                        your Vim working directory, you have
+                                        to do a full refresh (R) to recompute
+                                        the relative paths. The current base
+                                        directory is always displayed in the
+                                        header.
 
 To change the values of these settings in the current vim session, it is
 recommended to use |:SBSettings| command.
@@ -818,6 +830,10 @@ This also works on visual blocks.
 ==============================================================================
                                             *selectbuf-changes*
 
+                                            *selectbuf-changes-4.3*
+- New setting selBufShowRelativePath (Nathan Huizinga
+  (nathan dot huizinga at gmail dot com)).
+- Bug fix: |:SBSettings| is still broken.
                                             *selectbuf-changes-4.2*
 - Bug fix: |:SBSettings| is broken.
 - Bug fix: syntax highlighting is sometimes broken the first time browser
@@ -952,6 +968,7 @@ This also works on visual blocks.
   are loaded in the current tab only. This is useful to quickly find related
   files (that you edit in a particular tab).
 - An option to temporarily freeze the current MRU order could be useful.
+- Use pathshorten() to shorten the paths when they are too long?
 
                                             *selectbuf-acknowledgements*
 - Thomas Link (t dot link02a at gmx dot net) for his excellent idea with mapping
@@ -970,6 +987,7 @@ This also works on visual blocks.
     - Tim Johnson (tim at johnsons-web dot com)
     - David Rennalls (drennalls at canada dot com)
     - Eric Winger (ewinger at keyww dot com)
-    - George Reilly (georgere at windows dot microsoft dot com).
+    - George Reilly (georgere at windows dot microsoft dot com)
+    - Nathan Huizinga (nathan dot huizinga at gmail dot com)
 
  vim6:tw=80:ts=8:ft=help:ai:sw=4:et

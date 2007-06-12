@@ -71,6 +71,7 @@ if !exists('s:myBufNum')
   let s:indList = ""
   let s:quiteWinEnter = 0
   let s:originatingWinNr = 1
+  let s:baseDir = '' " Base directory for relative paths.
 endif
 
 let s:sortByNumber=0
@@ -88,7 +89,7 @@ let s:settings = split('AlwaysHideBufNums,AlwaysShowDetails,AlwaysShowHelp,' .
       \ 'DefaultSortOrder,DelayedDynUpdate,DisableMRUlisting,DisableSummary,' .
       \ 'EnableDynUpdate,IgnoreCaseInSort,IgnoreNonFileBufs,' .
       \ 'RestoreWindowSizes,SplitType,UseVerticalSplit,DoFileOnClose,' .
-      \ 'DisplayMaxPath,Launcher,RestoreSearchString', ',')
+      \ 'DisplayMaxPath,Launcher,RestoreSearchString,ShowRelativePath', ',')
 let s:settingsCompStr = ''
 " Map of global variable name to the local variable that are different than
 "   their global counterparts.
@@ -218,11 +219,14 @@ function! s:AddHeader()
       \	    " : reverse sort\n"
       \ . "\" Next, Previous & Current buffers are marked 'a', 'b' & 'c' "
 	\ . "respectively\n"
-      \ . "\" Press " . helpKey . " to hide help\n"
-  else
-    let helpMsg = helpMsg
-      \ . "\" Press " . helpKey . " to show help\n"
   endif
+  let helpMsg = helpMsg
+    \ . "\" Press " . helpKey . " to show help"
+  if g:selBufShowRelativePath
+    let helpMsg = helpMsg
+      \ . " (baseDir=".s:baseDir.")"
+  endif
+  let helpMsg = helpMsg ."\n"
   let helpMsg = helpMsg . "\"=" . " Sorting=" . s:sortdirlabel .
               \ s:GetSortNameByType(g:selBufDefaultSortOrder) .
               \ ",showDetails=" . g:selBufAlwaysShowDetails .
@@ -277,6 +281,8 @@ function! s:FullUpdate() " {{{
   setlocal modifiable
 
   call genutils#OptClearBuffer()
+
+  let s:baseDir = getcwd()
 
   call s:AddHeader()
   silent! keepjumps $delete _ " Delete one empty extra line at the end.
@@ -737,6 +743,9 @@ function! s:GetBufName(bufNum)
     if g:selBufAlwaysShowPaths == 2
       let bufName = s:FileName(a:bufNum)
       let path = expand('#'.a:bufNum.':p:h')
+      if g:selBufShowRelativePath
+        let path = genutils#RelPathFromDir(s:baseDir, path)
+      endif
       let bufName = bufName . genutils#GetSpacer(s:bufNameFieldWidth -
             \ strlen(bufName) + 1) . s:TrimPath(path)
     else
@@ -1090,12 +1099,14 @@ function! s:SetupSyntax() " {{{
 
   " The mappings in the help header.
   syn match SelBufMapping "\s\(\i\|[ /<>-]\)\+ : " contained
-  syn match SelBufHelpLine "^\" .*$" contains=SelBufMapping
+  syn match SelBufHelpLine "^\" .*$" contains=SelBufMapping,SelBufKeyValuePair
 
   " The starting line. Summary of current settings.
-  syn keyword SelBufKeyWords Sorting showDetails showHidden showDirs showPaths bufNameOnly hideBufNums contained
-  syn region SelBufKeyValues start=+=+ end=+,+ end=+$+ skip=+ + contained
-  syn match SelBufKeyValuePair +\i\+=\i\++ contained contains=SelBufKeyWords,SelBufKeyValues
+  syn keyword SelBufKeyWords Sorting showDetails showHidden showDirs showPaths bufNameOnly hideBufNums baseDir contained
+  " FIXME: The last character is included in the highlighting, though we are
+  " excluding it.
+  syn region SelBufKeyValues start=+=+ end=+[,)]+ end=+$+ skip=+ + contained
+  syn match SelBufKeyValuePair +\i\+=[^,)]\++ contained contains=SelBufKeyWords,SelBufKeyValues
   syn match SelBufSummary "^\"= .*$" contains=SelBufKeyValuePair
 
   syn match SelBufBufLine "^[^"].*$" contains=SelBufBufNumber,SelBufBufIndicators,SelBufBufName,@SelBufLineAdd
@@ -1479,7 +1490,7 @@ function! selectbuf#SBSettings(...)
           \ "Select the setting: ", -1, 0, 3)
   endif
   if selectedSetting !~# '^\s*$'
-    let oldVal = g:selBuf(selectedSetting)
+    let oldVal = g:selBuf{selectedSetting}
     if a:0 > 1
       let newVal = a:2
       echo 'Current value for' selectedSetting.': "'.oldVal.'" New value: "'.
@@ -1490,7 +1501,7 @@ function! selectbuf#SBSettings(...)
     endif
     if newVal != oldVal
       let g:selBuf{selectedSetting} = newVal
-      call selectbuf#Initialize(1)
+      call selectbuf#Initialize()
     endif
   endif
 endfunction
